@@ -1,77 +1,56 @@
 import streamlit as st
-import streamlit_authenticator as stauth
-import pandas as pd
 from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="CORMAIN", layout="wide", page_icon="🛠️")
+# Configuración de la página
+st.set_page_config(page_title="CORMAIN - Gestión de Mantenimiento", layout="centered")
 
-# Conexión a Google Sheets
+# Título de la app
+st.title("🛠️ CORMAIN")
+st.subheader("Registro de Usuarios")
+
+# Crear la conexión con Google Sheets
+# Asegúrate de que en Secrets el link termine en /edit#gid=0
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- 1. CARGAR USUARIOS DESDE EL EXCEL ---
-try:
-    df_usuarios = conn.read(worksheet="Usuarios")
-    # Convertimos el Excel a un formato que el login entienda
-    user_dict = {}
-    for index, row in df_usuarios.iterrows():
-        user_dict[row['username']] = {"name": row['name'], "password": row['password']}
-except:
-    # Si el Excel está vacío, dejamos a emilio123 por defecto para no quedar fuera
-    user_dict = {"emilio123": {"name": "Emilio", "password": "abc123"}}
+# --- FUNCIÓN PARA LEER DATOS ---
+def cargar_datos():
+    try:
+        # Forzamos la lectura de la pestaña "Usuarios"
+        return conn.read(worksheet="Usuarios", ttl=0)
+    except Exception as e:
+        st.error(f"Error al conectar con la pestaña 'Usuarios': {e}")
+        return None
 
-config = {
-    "credentials": {"usernames": user_dict},
-    "cookie": {"expiry_days": 30, "key": "cormain_key", "name": "cormain_cookie"}
-}
-
-authenticator = stauth.Authenticate(
-    config['credentials'], config['cookie']['name'], config['cookie']['key'], config['cookie']['expiry_days']
-)
-
-# --- 2. LÓGICA DE REGISTRO (BOTÓN QUE FALTABA) ---
-if not st.session_state.get("authentication_status"):
-    with st.expander("🆕 ¿No tienes cuenta? Regístrate aquí"):
-        with st.form("registro"):
-            n_nombre = st.text_input("Nombre Completo")
-            n_usuario = st.text_input("Usuario (ID)")
-            n_clave = st.text_input("Contraseña", type="password")
-            if st.form_submit_button("Crear mi cuenta en CORMAIN"):
-                # Crear fila nueva
-                nueva_data = pd.DataFrame([[n_nombre, n_usuario, n_clave]], 
-                                         columns=['name', 'username', 'password'])
-                # Combinar con lo existente y guardar
-                df_actual = conn.read(worksheet="Usuarios")
-                df_final = pd.concat([df_actual, nueva_data], ignore_index=True)
-                conn.update(worksheet="Usuarios", data=df_final)
-                st.success("¡Cuenta creada! Ya puedes loguearte arriba.")
-
-# --- 3. LOGIN ---
-authenticator.login(location='main')
-
-if st.session_state["authentication_status"]:
-    authenticator.logout("Cerrar Sesión", "sidebar")
-    st.title("🛠️ CORMAIN")
+# --- FORMULARIO DE REGISTRO ---
+with st.form("registro_form"):
+    nombre = st.text_input("Nombre Completo")
+    usuario = st.text_input("Usuario (ID o Correo)")
+    password = st.text_input("Contraseña", type="password")
     
-    menu = ["Recursos Humanos", "Órdenes de Trabajo"]
-    choice = st.sidebar.selectbox("Módulos", menu)
+    boton_registro = st.form_submit_state = st.form_submit_button("Crear mi cuenta en CORMAIN")
 
-    if choice == "Recursos Humanos":
-        st.header("👤 Registro de Personal")
-        with st.form("rrhh_form"):
-            nom = st.text_input("Nombre")
-            cod = st.text_input("Código")
-            em = st.text_input("Email")
-            cel = st.text_input("Celular")
-            if st.form_submit_button("Guardar en Base de Datos"):
-                # Guardar en la pestaña Personal
-                nueva_fila = pd.DataFrame([[nom, cod, em, cel, st.session_state['username']]], 
-                                         columns=['Nombre', 'Codigo', 'Email', 'Celular', 'Registrado_Por'])
-                df_pers = conn.read(worksheet="Personal")
-                df_res = pd.concat([df_pers, nueva_fila], ignore_index=True)
-                conn.update(worksheet="Personal", data=df_res)
+if boton_registro:
+    if nombre and usuario and password:
+        df_actual = cargar_datos()
+        
+        if df_actual is not None:
+            # Crear el nuevo registro
+            nuevo_usuario = pd.DataFrame([{
+                "name": nombre,
+                "username": usuario,
+                "password": password
+            }])
+            
+            # Combinar datos antiguos con el nuevo
+            df_actualizado = pd.concat([df_actual, nuevo_usuario], ignore_index=True)
+            
+            # Guardar en Google Sheets
+            try:
+                conn.update(worksheet="Usuarios", data=df_actualizado)
+                st.success(f"✅ ¡Bienvenido {nombre}! Cuenta creada con éxito.")
                 st.balloons()
-                st.success("¡Datos guardados en el Excel!")
-
-elif st.session_state["authentication_status"] is False:
-    st.error("Usuario o contraseña incorrectos")
+            except Exception as e:
+                st.error(f"Error al guardar en el Excel: {e}")
+    else:
+        st.warning("Por favor, rellena todos los campos.")
