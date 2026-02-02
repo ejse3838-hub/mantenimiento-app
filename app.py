@@ -9,51 +9,59 @@ st.title("🛠️ CORMAIN")
 # 2. Conexión con Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Función para cargar usuarios
+# Función para leer los usuarios del Excel
 def cargar_usuarios():
     try:
+        # Lee la pestaña "Usuarios"
         return conn.read(worksheet="Usuarios", ttl=0)
     except:
+        # Si hay error o está vacía, devuelve una estructura básica
         return pd.DataFrame(columns=["name", "username", "password"])
 
-# 3. Menú Lateral para navegar
-menu = st.sidebar.selectbox("Selecciona una opción", ["Iniciar Sesión", "Registrarse"])
+# 3. Menú de navegación en la barra lateral
+menu = st.sidebar.selectbox("Menú", ["Iniciar Sesión", "Registrarse"])
 
 if menu == "Iniciar Sesión":
-    st.subheader("Acceso al Sistema")
-    user_input = st.text_input("Usuario (Correo)")
-    pass_input = st.text_input("Contraseña", type="password")
+    st.subheader("Acceso para Personal Registrado")
+    user_login = st.text_input("Usuario (Correo)")
+    pass_login = st.text_input("Contraseña", type="password")
     
     if st.button("Entrar"):
         df = cargar_usuarios()
-        # Verificar si el usuario y contraseña coinciden
-        validar = df[(df['username'] == user_input) & (df['password'] == pass_input)]
+        # Buscamos si el usuario y clave existen en el Excel
+        usuario_valido = df[(df['username'] == user_login) & (df['password'] == pass_login)]
         
-        if not validar.empty:
-            nombre_usuario = validar.iloc[0]['name']
-            st.success(f"✅ ¡Bienvenido de nuevo, {nombre_usuario}!")
+        if not usuario_valido.empty:
+            nombre_real = usuario_valido.iloc[0]['name']
+            st.success(f"✅ ¡Bienvenido, {nombre_real}!")
             st.balloons()
-            # Aquí podrías poner el resto de tu app de mantenimiento
-            st.info("Próximamente: Panel de Gestión de Mantenimiento.")
+            # Aquí irá tu futuro panel de control
+            st.info("Ya estás dentro del sistema. Pronto activaremos el panel de reportes.")
         else:
-            st.error("❌ Usuario o contraseña incorrectos.")
+            st.error("❌ Usuario o contraseña no encontrados. Por favor, regístrate si no tienes cuenta.")
 
 elif menu == "Registrarse":
-    st.subheader("Crea tu nueva cuenta")
-    with st.form("registro_form"):
-        nombre = st.text_input("Nombre Completo")
-        nuevo_usuario = st.text_input("Usuario (Correo)")
+    st.subheader("Crea tu cuenta nueva")
+    with st.form("form_registro"):
+        nuevo_nombre = st.text_input("Nombre Completo")
+        nuevo_user = st.text_input("Usuario (Correo)")
         nueva_clave = st.text_input("Contraseña", type="password")
-        submit = st.form_submit_button("Crear mi cuenta en CORMAIN")
-
-    if submit:
-        if nombre and nuevo_usuario and nueva_clave:
-            df_existente = cargar_usuarios()
-            if nuevo_usuario in df_existente['username'].values:
-                st.warning("⚠️ Este usuario ya existe.")
+        boton_registro = st.form_submit_button("Crear mi cuenta en CORMAIN")
+        
+    if boton_registro:
+        if nuevo_nombre and nuevo_user and nueva_clave:
+            df_actual = cargar_usuarios()
+            
+            # Evitar que se registren correos repetidos
+            if nuevo_user in df_actual['username'].values:
+                st.warning("⚠️ Este correo ya está registrado. Intenta iniciar sesión.")
             else:
-                nuevo_df = pd.concat([df_existente, pd.DataFrame([{"name": nombre, "username": nuevo_usuario, "password": nueva_clave}])], ignore_index=True)
-                conn.update(worksheet="Usuarios", data=nuevo_df)
-                st.success("✅ Registro exitoso. Ahora puedes Iniciar Sesión en el menú lateral.")
+                # Agregar el nuevo usuario
+                nuevo_dato = pd.DataFrame([{"name": nuevo_nombre, "username": nuevo_user, "password": nueva_clave}])
+                df_final = pd.concat([df_actual, nuevo_dato], ignore_index=True)
+                
+                # Guardar en el Excel
+                conn.update(worksheet="Usuarios", data=df_final)
+                st.success("✅ ¡Cuenta creada con éxito! Ahora cambia a 'Iniciar Sesión' en el menú de la izquierda.")
         else:
             st.warning("Por favor, llena todos los campos.")
