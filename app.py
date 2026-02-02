@@ -4,46 +4,49 @@ import streamlit_authenticator as stauth
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Mantenimiento Pro", layout="wide")
 
-# --- 1. CONFIGURACIÓN DE USUARIOS ---
+# --- 1. CONFIGURACIÓN DE USUARIOS (FORMATO EXACTO) ---
+# La librería ahora necesita que todo esté envuelto en una llave 'credentials'
 config = {
-    "usernames": {
-        "emilio123": {"name": "Emilio Silva", "password": "abc123"},
-        "admin": {"name": "Admin Principal", "password": "admin123"}
+    "credentials": {
+        "usernames": {
+            "emilio123": {"name": "Emilio Silva", "password": "abc123"},
+            "admin": {"name": "Admin Principal", "password": "admin123"}
+        }
     },
-    "cookie": {"expiry_days": 30, "key": "mantenimiento_key", "name": "mantenimiento_cookie"},
-    "pre-authorized": {"emails": []}
+    "cookie": {"expiry_days": 30, "key": "mantenimiento_key", "name": "mantenimiento_cookie"}
 }
 
-# Nueva forma de crear el objeto
+# Inicializar el autenticador con la estructura corregida
 authenticator = stauth.Authenticate(
-    config['usernames'],
+    config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
     config['cookie']['expiry_days']
 )
 
 # --- 2. PANTALLA DE LOGIN ---
-# En las versiones más nuevas, solo llamamos al método y él maneja el st.session_state
+# El método login ahora se encarga de todo el flujo
 authenticator.login(location='main')
 
+# Verificamos el estado de autenticación usando st.session_state
 if st.session_state["authentication_status"]:
-    # --- ZONA SEGURA ---
     authenticator.logout("Cerrar Sesión", "sidebar")
     st.sidebar.success(f"Bienvenido, {st.session_state['name']}")
     
     st.title("🛠️ Sistema de Gestión de Mantenimiento")
     
+    # --- MENÚ DE NAVEGACIÓN ---
     menu = ["Órdenes de Trabajo (OT)", "Recursos Humanos", "Activos"]
     choice = st.sidebar.selectbox("Módulos", menu)
     
     if choice == "Recursos Humanos":
         st.header("👤 Gestión de Personal")
         with st.form("form_rrhh"):
-            nombre_p = st.text_input("Nombre del técnico")
+            nombre_t = st.text_input("Nombre del Técnico")
             if st.form_submit_button("Guardar"):
-                st.success(f"Registrado por: {st.session_state['username']}")
+                st.success(f"Registrado en la sesión de: {st.session_state['username']}")
 
 elif st.session_state["authentication_status"] is False:
     st.error("Usuario o contraseña incorrectos")
 elif st.session_state["authentication_status"] is None:
-    st.warning("Por favor, ingresa tus credenciales")
+    st.warning("Por favor, ingresa tus credenciales para acceder")
