@@ -2,66 +2,64 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# 1. Configuración de la página
+# 1. Configuración de la interfaz
 st.set_page_config(page_title="CORMAIN", page_icon="🛠️")
 st.title("🛠️ CORMAIN")
 
-# 2. Conexión con Google Sheets
+# 2. Conexión con Google Sheets (Lectura y Escritura)
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Función para leer los usuarios del Excel
-def cargar_usuarios():
+def cargar_datos():
     try:
-        # Lee la pestaña "Usuarios"
+        # Forzamos lectura fresca de la pestaña "Usuarios"
         return conn.read(worksheet="Usuarios", ttl=0)
     except:
-        # Si hay error o está vacía, devuelve una estructura básica
         return pd.DataFrame(columns=["name", "username", "password"])
 
-# 3. Menú de navegación en la barra lateral
-menu = st.sidebar.selectbox("Menú", ["Iniciar Sesión", "Registrarse"])
+# 3. Menú de navegación lateral
+menu = st.sidebar.selectbox("Seleccione una opción", ["Iniciar Sesión", "Registrarse"])
 
 if menu == "Iniciar Sesión":
-    st.subheader("Acceso para Personal Registrado")
-    user_login = st.text_input("Usuario (Correo)")
-    pass_login = st.text_input("Contraseña", type="password")
+    st.subheader("Acceso al Panel de Control")
+    user_input = st.text_input("Usuario (Correo)")
+    pass_input = st.text_input("Contraseña", type="password")
     
     if st.button("Entrar"):
-        df = cargar_usuarios()
-        # Buscamos si el usuario y clave existen en el Excel
-        usuario_valido = df[(df['username'] == user_login) & (df['password'] == pass_login)]
+        df = cargar_datos()
+        # Verificamos si coinciden usuario y clave en el Excel
+        user_db = df[(df['username'] == user_input) & (df['password'] == pass_input)]
         
-        if not usuario_valido.empty:
-            nombre_real = usuario_valido.iloc[0]['name']
-            st.success(f"✅ ¡Bienvenido, {nombre_real}!")
+        if not user_db.empty:
+            nombre = user_db.iloc[0]['name']
+            st.success(f"✅ ¡Bienvenido, {nombre}!")
             st.balloons()
-            # Aquí irá tu futuro panel de control
-            st.info("Ya estás dentro del sistema. Pronto activaremos el panel de reportes.")
+            st.info("Próximamente: Aquí verás tus reportes de mantenimiento.")
         else:
-            st.error("❌ Usuario o contraseña no encontrados. Por favor, regístrate si no tienes cuenta.")
+            st.error("❌ Credenciales incorrectas o usuario no registrado.")
 
 elif menu == "Registrarse":
-    st.subheader("Crea tu cuenta nueva")
-    with st.form("form_registro"):
+    st.subheader("Crear nueva cuenta")
+    with st.form("registro_form"):
         nuevo_nombre = st.text_input("Nombre Completo")
         nuevo_user = st.text_input("Usuario (Correo)")
-        nueva_clave = st.text_input("Contraseña", type="password")
-        boton_registro = st.form_submit_button("Crear mi cuenta en CORMAIN")
-        
-    if boton_registro:
-        if nuevo_nombre and nuevo_user and nueva_clave:
-            df_actual = cargar_usuarios()
-            
-            # Evitar que se registren correos repetidos
+        nueva_pass = st.text_input("Contraseña", type="password")
+        submit = st.form_submit_button("Crear mi cuenta en CORMAIN")
+
+    if submit:
+        if nuevo_nombre and nuevo_user and nueva_pass:
+            df_actual = cargar_datos()
             if nuevo_user in df_actual['username'].values:
-                st.warning("⚠️ Este correo ya está registrado. Intenta iniciar sesión.")
+                st.warning("⚠️ Este correo ya está registrado.")
             else:
-                # Agregar el nuevo usuario
-                nuevo_dato = pd.DataFrame([{"name": nuevo_nombre, "username": nuevo_user, "password": nueva_clave}])
-                df_final = pd.concat([df_actual, nuevo_dato], ignore_index=True)
+                # Preparamos la nueva fila
+                nuevo_usuario = pd.DataFrame([{"name": nuevo_nombre, "username": nuevo_user, "password": nueva_pass}])
+                # Concatenamos y actualizamos
+                df_final = pd.concat([df_actual, nuevo_usuario], ignore_index=True)
                 
-                # Guardar en el Excel
-                conn.update(worksheet="Usuarios", data=df_final)
-                st.success("✅ ¡Cuenta creada con éxito! Ahora cambia a 'Iniciar Sesión' en el menú de la izquierda.")
+                try:
+                    conn.update(worksheet="Usuarios", data=df_final)
+                    st.success("✅ ¡Registro exitoso! Ya puedes iniciar sesión en el menú de la izquierda.")
+                except Exception as e:
+                    st.error(f"Error al guardar: Asegúrate de que el Excel esté compartido como EDITOR.")
         else:
-            st.warning("Por favor, llena todos los campos.")
+            st.warning("Por favor, completa todos los campos.")
