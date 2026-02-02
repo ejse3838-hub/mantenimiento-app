@@ -12,32 +12,36 @@ credentials = {
     }
 }
 
-# Configuración del autenticador
 authenticator = stauth.Authenticate(
-    credentials,
-    "mantenimiento_cookie",
-    "signature_key",
-    cookie_expiry_days=30
+    credentials, "mantenimiento_cookie", "signature_key", cookie_expiry_days=30
 )
 
-# --- 2. PANTALLA DE LOGIN (LÍNEA CORREGIDA) ---
-# Quitamos el "main" que causaba el error
-nombre, autenticado, usuario = authenticator.login("Login")
+# --- 2. PANTALLA DE LOGIN (CORREGIDA) ---
+# Usamos location='main' para que sepa que va en el centro de la pantalla
+# La nueva versión devuelve los valores directamente
+nombre, autenticado, usuario = authenticator.login(label="Iniciar Sesión", location="main")
 
-if autenticado:
+if st.session_state["authentication_status"]:
     authenticator.logout("Cerrar Sesión", "sidebar")
-    st.sidebar.success(f"Bienvenido, {nombre}")
+    st.sidebar.success(f"Bienvenido, {st.session_state['name']}")
+    
     st.title("🛠️ Sistema de Gestión de Mantenimiento")
     
-    # Aquí sigue tu menú de navegación...
     menu = ["Órdenes de Trabajo (OT)", "Recursos Humanos", "Activos"]
-    choice = st.sidebar.selectbox("Módulos", menu)
+    choice = st.sidebar.selectbox("Módulos del Sistema", menu)
     
     if choice == "Recursos Humanos":
         st.header("👤 Gestión de Personal")
-        # Tu formulario aquí...
+        with st.form("form_rrhh"):
+            c1, c2 = st.columns(2)
+            nombre_p = c1.text_input("Nombre")
+            codigo = c1.text_input("Código")
+            email = c2.text_input("Email")
+            celular = c2.text_input("Celular")
+            if st.form_submit_button("Guardar Datos"):
+                st.success(f"¡Empleado {nombre_p} registrado!")
 
-elif autenticado == False:
-    st.error("Usuario o contraseña incorrectos.")
-elif autenticado == None:
-    st.warning("Por favor, ingresa tus credenciales.")
+elif st.session_state["authentication_status"] is False:
+    st.error("Usuario o contraseña incorrectos")
+elif st.session_state["authentication_status"] is None:
+    st.warning("Por favor, ingresa tus credenciales")
