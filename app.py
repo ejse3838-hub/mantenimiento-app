@@ -1,65 +1,46 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# 1. Configuración de la interfaz
+# Configuración
 st.set_page_config(page_title="CORMAIN", page_icon="🛠️")
 st.title("🛠️ CORMAIN")
 
-# 2. Conexión con Google Sheets (Lectura y Escritura)
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Link del Excel (el mismo de tus secrets)
+URL = "https://docs.google.com/spreadsheets/d/1j9BYnypEdWlsIIoXgTCkLwb_Mq9YoTrlZRNc6KPZzsk/export?format=csv&gid=0"
 
 def cargar_datos():
     try:
-        # Forzamos lectura fresca de la pestaña "Usuarios"
-        return conn.read(worksheet="Usuarios", ttl=0)
-    except:
-        return pd.DataFrame(columns=["name", "username", "password"])
+        # Leemos el Excel como un CSV público
+        df = pd.read_csv(URL)
+        # Limpiamos nombres de columnas y datos (quita espacios y pone en minúsculas)
+        df.columns = df.columns.str.strip().str.lower()
+        df['username'] = df['username'].astype(str).str.strip()
+        df['password'] = df['password'].astype(str).str.strip()
+        return df
+    except Exception as e:
+        st.error(f"Error al leer la base de datos: {e}")
+        return None
 
-# 3. Menú de navegación lateral
-menu = st.sidebar.selectbox("Seleccione una opción", ["Iniciar Sesión", "Registrarse"])
+menu = st.sidebar.selectbox("Menú", ["Iniciar Sesión", "Registrarse"])
 
 if menu == "Iniciar Sesión":
-    st.subheader("Acceso al Panel de Control")
-    user_input = st.text_input("Usuario (Correo)")
-    pass_input = st.text_input("Contraseña", type="password")
+    st.subheader("Acceso de Usuario")
+    u = st.text_input("Usuario (Correo)").strip()
+    p = st.text_input("Contraseña", type="password").strip()
     
     if st.button("Entrar"):
         df = cargar_datos()
-        # Verificamos si coinciden usuario y clave en el Excel
-        user_db = df[(df['username'] == user_input) & (df['password'] == pass_input)]
-        
-        if not user_db.empty:
-            nombre = user_db.iloc[0]['name']
-            st.success(f"✅ ¡Bienvenido, {nombre}!")
-            st.balloons()
-            st.info("Próximamente: Aquí verás tus reportes de mantenimiento.")
-        else:
-            st.error("❌ Credenciales incorrectas o usuario no registrado.")
+        if df is not None:
+            # Buscamos coincidencia exacta
+            match = df[(df['username'] == u) & (df['password'] == p)]
+            
+            if not match.empty:
+                st.success(f"✅ ¡Bienvenido {match.iloc[0]['name']}!")
+                st.balloons()
+            else:
+                st.error("❌ No te encontré. Revisa que el usuario y clave sean iguales al Excel.")
+                # Muestra lo que la app está viendo (solo para pruebas)
+                st.write("Usuarios en la base de datos:", df[['name', 'username']])
 
 elif menu == "Registrarse":
-    st.subheader("Crear nueva cuenta")
-    with st.form("registro_form"):
-        nuevo_nombre = st.text_input("Nombre Completo")
-        nuevo_user = st.text_input("Usuario (Correo)")
-        nueva_pass = st.text_input("Contraseña", type="password")
-        submit = st.form_submit_button("Crear mi cuenta en CORMAIN")
-
-    if submit:
-        if nuevo_nombre and nuevo_user and nueva_pass:
-            df_actual = cargar_datos()
-            if nuevo_user in df_actual['username'].values:
-                st.warning("⚠️ Este correo ya está registrado.")
-            else:
-                # Preparamos la nueva fila
-                nuevo_usuario = pd.DataFrame([{"name": nuevo_nombre, "username": nuevo_user, "password": nueva_pass}])
-                # Concatenamos y actualizamos
-                df_final = pd.concat([df_actual, nuevo_usuario], ignore_index=True)
-                
-                try:
-                    conn.update(worksheet="Usuarios", data=df_final)
-                    st.success("✅ ¡Registro exitoso! Ya puedes iniciar sesión en el menú de la izquierda.")
-                except Exception as e:
-                    st.error(f"Error al guardar: Asegúrate de que el Excel esté compartido como EDITOR.")
-        else:
-            st.warning("Por favor, completa todos los campos.")
+    st.info("Para registrarte, por ahora escríbelo en el Excel mientras arreglamos el permiso de escritura.")
