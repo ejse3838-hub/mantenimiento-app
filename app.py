@@ -4,69 +4,72 @@ import streamlit_authenticator as stauth
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Software Mantenimiento Pro", layout="wide")
 
-# --- 1. CONFIGURACIÓN DE USUARIOS ---
-# En el futuro, estos nombres y claves vendrán de tu base de datos
-nombres = ["Emilio Silva", "Admin Principal", "Tecnico Invitado"]
-usuarios = ["emilio123", "admin", "user01"]
-# NOTA: En una app real usaremos claves encriptadas, por ahora usamos estas para probar:
-claves = ["abc123", "admin123", "clave456"] 
+# --- 1. CONFIGURACIÓN DE USUARIOS (NUEVO FORMATO) ---
+credentials = {
+    "usernames": {
+        "emilio123": {
+            "name": "Emilio Silva",
+            "password": "abc123"  # En el futuro esto irá encriptado
+        },
+        "admin": {
+            "name": "Admin Principal",
+            "password": "admin123"
+        }
+    }
+}
 
 # Crear el objeto de autenticación
+# Usamos 'mantenimiento_db' como nombre de la cookie para que sea única
 authenticator = stauth.Authenticate(
-    nombres, usuarios, claves, 
-    "mantenimiento_cookie", "signature_key", cookie_expiry_days=30
+    credentials,
+    "mantenimiento_cookie",
+    "signature_key",
+    cookie_expiry_days=30
 )
 
 # --- 2. PANTALLA DE LOGIN ---
-nombre, autenticado, usuario = authenticator.login("Iniciar Sesión", "main")
+# El método login ahora devuelve el nombre, el estado y el usuario
+# (La nueva versión requiere especificar el nombre del formulario)
+nombre, autenticado, usuario = authenticator.login("Login", "main")
 
 if autenticado:
-    # --- TODO ESTO SOLO SE VE SI EL USUARIO ENTRA CORRECTAMENTE ---
+    # --- TODO ESTO SOLO SE VE SI EL LOGIN ES EXITOSO ---
     
-    # Botón para salir en la barra lateral
+    # Botón de cierre de sesión y bienvenida
     authenticator.logout("Cerrar Sesión", "sidebar")
-    st.sidebar.write(f"👋 Bienvenido, **{nombre}**")
+    st.sidebar.success(f"Bienvenido, {nombre}")
     
     st.title("🛠️ Sistema de Gestión de Mantenimiento")
-    st.markdown(f"### Sesión activa: {usuario}")
 
     # --- NAVEGACIÓN ---
-    menu = ["Órdenes de Trabajo (OT)", "Recursos Humanos", "Activos", "Plan de Tareas"]
+    menu = ["Órdenes de Trabajo (OT)", "Recursos Humanos", "Activos"]
     choice = st.sidebar.selectbox("Módulos del Sistema", menu)
 
-    # --- MÓDULO 1: OTs ---
-    if choice == "Órdenes de Trabajo (OT)":
-        st.header("📋 Tablero de Control de OTs")
-        col1, col2, col3, col4 = st.columns(4)
-        col1.info("#### Pendientes")
-        col2.warning("#### En Proceso")
-        col3.error("#### En Revisión")
-        col4.success("#### Finalizadas")
-
-    # --- MÓDULO 2: RRHH ---
-    elif choice == "Recursos Humanos":
+    if choice == "Recursos Humanos":
         st.header("👤 Gestión de Personal")
         with st.form("form_rrhh"):
             c1, c2 = st.columns(2)
-            c1.text_input("Nombre")
-            c1.text_input("Apellidos")
-            c1.text_input("Código")
-            c1.selectbox("Clasificación", ["Técnico", "Mecánico", "Eléctrico"])
-            c2.text_input("Email")
-            c2.number_input("Valor por hora ($)", min_value=0.0)
-            c2.text_input("Dirección")
-            c2.text_input("Celular")
+            nombre_pers = c1.text_input("Nombre")
+            apellido_pers = c1.text_input("Apellidos")
+            codigo = c1.text_input("Código")
+            clase = c1.selectbox("Clasificación", ["Técnico", "Mecánico", "Eléctrico"])
+            
+            email = c2.text_input("Email")
+            pago = c2.number_input("Valor por hora ($)", min_value=0.0)
+            direccion = c2.text_input("Dirección")
+            celular = c2.text_input("Celular")
             
             if st.form_submit_button("Guardar Datos"):
-                st.success(f"Datos de {nombre} procesados (Módulo en desarrollo)")
+                # Aquí conectaremos luego Google Sheets
+                st.balloons()
+                st.success(f"¡Empleado {nombre_pers} registrado con éxito por {nombre}!")
 
-    # --- MÓDULO 3: ACTIVOS ---
-    elif choice == "Activos":
-        st.header("⚙️ Inventario de Activos")
-        st.info("Aquí aparecerán las máquinas asignadas a tu usuario.")
+    elif choice == "Órdenes de Trabajo (OT)":
+        st.header("📋 Tablero de OTs")
+        st.info("Módulo de seguimiento en construcción.")
 
 # --- MENSAJES DE ERROR ---
 elif autenticado == False:
-    st.error("Usuario o contraseña incorrectos. Por favor, intenta de nuevo.")
+    st.error("Usuario o contraseña incorrectos.")
 elif autenticado == None:
-    st.warning("Por favor, ingresa tus credenciales para acceder al software.")
+    st.warning("Por favor, ingresa tus credenciales.")
