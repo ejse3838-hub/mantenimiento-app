@@ -97,27 +97,42 @@ else:
         if datos_m:
             st.dataframe(pd.DataFrame(datos_m)[["nombre_maquina", "codigo", "ubicacion"]], use_container_width=True)
 
-    # --- SECCIÓN ÓRDENES DE TRABAJO (FLUJO DE PROCESOS) ---
+   # --- SECCIÓN ÓRDENES DE TRABAJO (REEMPLAZAR DESDE AQUÍ) ---
     elif opcion == "Órdenes de Trabajo":
         st.header("📑 Flujo de Órdenes de Producción")
         
-        # Formulario vinculado a máquinas
-        with st.expander("🆕 Crear Orden de Trabajo"):
-            maqs = obtener_datos("maquinas")
-            lista_maqs = [m['nombre_maquina'] for m in maqs] if maqs else ["Sin máquinas"]
-            
+        # 1. Obtener datos de máquinas para el selector
+        maqs_data = obtener_datos("maquinas")
+        # Creamos un diccionario para convertir el nombre de la máquina en su ID real
+        dict_maquinas = {m['nombre_maquina']: m['id'] for m in maqs_data} if maqs_data else {}
+        lista_nombres_maqs = list(dict_maquinas.keys()) if dict_maquinas else ["Sin máquinas registradas"]
+
+        # Formulario para crear la orden
+        with st.expander("🆕 Crear Orden de Trabajo", expanded=True):
             with st.form("ot_form"):
                 desc = st.text_area("Descripción del trabajo")
-                maq_asig = st.selectbox("Asignar a Máquina", lista_maqs)
+                maq_sel = st.selectbox("Asignar a Máquina", lista_nombres_maqs)
+                
                 if st.form_submit_button("Iniciar Orden"):
-                    supabase.table("ordenes").insert({
-                        "descripcion": desc, "estado": "Proceso"
-                    }).execute()
-                    st.rerun()
+                    if desc and maq_sel != "Sin máquinas registradas":
+                        # Obtenemos el ID numérico de la máquina seleccionada
+                        id_m = dict_maquinas[maq_sel]
+                        
+                        # INSERT CORREGIDO: Ahora enviamos el id_maquina para evitar el error de API
+                        supabase.table("ordenes").insert({
+                            "descripcion": desc, 
+                            "estado": "Proceso",
+                            "id_maquina": id_m  
+                        }).execute()
+                        st.success("✅ Orden lanzada a producción")
+                        st.rerun()
+                    else:
+                        st.warning("Escribe una descripción y selecciona una máquina válida.")
 
-        # EL KANBAN (PROCESOS)
+        # EL KANBAN (PROCESOS) - Mantenemos el resto igual para que veas tus tarjetas
         st.divider()
         c1, c2, c3 = st.columns(3)
+        # ... (aquí sigue el resto de tu código de columnas de proceso)
         
         estados = [("Proceso", c1), ("Revisión Jefe", c2), ("Finalizada", c3)]
         
@@ -141,3 +156,4 @@ else:
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.auth = False
         st.rerun()
+
