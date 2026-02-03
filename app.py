@@ -47,8 +47,9 @@ else:
         datos_p = obtener_datos("personal")
         if datos_p:
             df_p = pd.DataFrame(datos_p)
-            # Solo mostramos columnas de texto para editar
-            st.data_editor(df_p[["nombre", "cargo"]], use_container_width=True, key="edit_rrhh")
+            # Solo mostramos columnas de texto para editar y ocultamos el ID interno
+            cols_p = [c for c in ["nombre", "cargo", "especialidad"] if c in df_p.columns]
+            st.data_editor(df_p[cols_p], use_container_width=True, key="edit_rrhh")
 
     # --- MAQUINARIA ---
     elif opcion == "Maquinaria":
@@ -64,17 +65,18 @@ else:
         datos_m = obtener_datos("maquinas")
         if datos_m:
             df_m = pd.DataFrame(datos_m)
-            st.data_editor(df_m[["nombre_maquina", "codigo"]], use_container_width=True, key="edit_maq")
+            cols_m = [c for c in ["nombre_maquina", "codigo", "ubicacion"] if c in df_m.columns]
+            st.data_editor(df_m[cols_m], use_container_width=True, key="edit_maq")
 
     # --- ÓRDENES DE TRABAJO (CORRECCIÓN DE ID) ---
     elif opcion == "Órdenes de Trabajo":
         st.header("📑 Órdenes de Producción")
         
-        # Obtenemos datos para mapear nombres a IDs
+        # Obtenemos datos para mapear nombres a IDs ocultos
         maqs = obtener_datos("maquinas")
         tecs = obtener_datos("personal")
         
-        # Mapeo seguro para evitar KeyError
+        # Mapeo seguro usando .get() para evitar KeyError
         dict_maqs = {m.get('nombre_maquina', 'Desconocido'): m.get('id') for m in maqs} if maqs else {}
         dict_tecs = {t.get('nombre', 'Sin nombre'): t.get('id') for t in tecs} if tecs else {}
 
@@ -86,7 +88,7 @@ else:
                 
                 if st.form_submit_button("Iniciar"):
                     if dict_maqs and dict_tecs:
-                        # Estructura que evita el APIError
+                        # Estructura que envía los IDs necesarios para evitar el APIError
                         ins_data = {
                             "descripcion": descripcion,
                             "id_maquina": dict_maqs[m_sel],
@@ -102,7 +104,10 @@ else:
         ots = obtener_datos("ordenes")
         if ots:
             st.subheader("Estado Actual")
-            st.dataframe(pd.DataFrame(ots)[["id", "descripcion", "estado"]], use_container_width=True)
+            df_ots = pd.DataFrame(ots)
+            # Mostramos solo información relevante para el usuario
+            cols_ot = [c for c in ["id", "descripcion", "estado"] if c in df_ots.columns]
+            st.dataframe(df_ots[cols_ot], use_container_width=True)
 
     if st.sidebar.button("Salir"):
         st.session_state.auth = False
