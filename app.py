@@ -1,39 +1,54 @@
 import streamlit as st
 from supabase import create_client, Client
 
-# Conexión con Supabase usando tus Secrets
+# 1. Conexión (Ya la tienes bien)
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-st.title("Sistema de Mantenimiento CORMAIN")
-
-# Función para leer los usuarios de la tabla que creamos
 def cargar_usuarios():
-    try:
-        response = supabase.table("usuarios").select("*").execute()
-        return response.data
-    except Exception:
-        return []
+    response = supabase.table("usuarios").select("*").execute()
+    return response.data
 
-# Lógica de Login
-if 'auth' not in st.session_state:
-    st.session_state.auth = False
+# --- LÓGICA DE NAVEGACIÓN ---
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
 
-if not st.session_state.auth:
-    email_log = st.text_input("Correo electrónico")
-    pass_log = st.text_input("Contraseña", type="password")
+if not st.session_state.autenticado:
+    st.title("CORMAIN - Login")
+    email_input = st.text_input("Correo")
+    pass_input = st.text_input("Contraseña", type="password")
     
     if st.button("Entrar"):
-        datos = cargar_usuarios()
-        # Busca si el correo y clave coinciden con lo que insertaste en Supabase
-        if any(u['email'] == email_log and u['password'] == pass_log for u in datos):
-            st.session_state.auth = True
+        usuarios = cargar_usuarios()
+        if any(u['email'] == email_input and u['password'] == pass_input for u in usuarios):
+            st.session_state.autenticado = True
             st.rerun()
         else:
-            st.error("Credenciales incorrectas. Revisa tu tabla en Supabase.")
+            st.error("Credenciales incorrectas")
+
 else:
-    st.success("¡Bienvenido al sistema!")
-    if st.button("Cerrar Sesión"):
-        st.session_state.auth = False
+    # --- AQUÍ EMPIEZA LO QUE TE FALTABA: EL MENÚ ---
+    st.sidebar.title("Menú Principal")
+    opcion = st.sidebar.selectbox(
+        "Seleccione una opción",
+        ["Inicio", "Recursos Humanos", "Órdenes de Trabajo", "Inventario"]
+    )
+
+    if opcion == "Inicio":
+        st.title("Bienvenido a CORMAIN")
+        st.write("Seleccione una opción en el menú de la izquierda para comenzar.")
+
+    elif opcion == "Recursos Humanos":
+        st.title("Gestión de Recursos Humanos")
+        # Aquí puedes poner tus st.text_input para nombres, cargos, etc.
+        st.write("Formulario de personal aquí...")
+
+    elif opcion == "Órdenes de Trabajo":
+        st.title("Órdenes de Trabajo")
+        # Aquí puedes poner el formulario para las órdenes
+        st.write("Registro de órdenes...")
+
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.autenticado = False
         st.rerun()
