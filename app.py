@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client, Client
 
 # --- CONEXIÓN ---
-st.set_page_config(page_title="CORMAIN CMMS FINAL", layout="wide")
+st.set_page_config(page_title="CORMAIN SOLUCIÓN FINAL", layout="wide")
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
@@ -27,7 +27,6 @@ if not st.session_state.auth:
 else:
     opcion = st.sidebar.selectbox("Menú", ["RRHH", "Maquinaria", "Órdenes"])
 
-    # --- SECCIONES RRHH Y MAQUINARIA ---
     if opcion == "RRHH":
         st.header("👥 Personal")
         with st.form("f1"):
@@ -35,7 +34,7 @@ else:
             if st.form_submit_button("Guardar"):
                 supabase.table("personal").insert({"nombre": n, "cargo": c}).execute()
                 st.rerun()
-        st.dataframe(pd.DataFrame(cargar("personal")), use_container_width=True)
+        st.dataframe(pd.DataFrame(cargar("personal")))
 
     elif opcion == "Maquinaria":
         st.header("⚙️ Maquinaria")
@@ -44,40 +43,53 @@ else:
             if st.form_submit_button("Registrar"):
                 supabase.table("maquinas").insert({"nombre_maquina": nm, "codigo": cd}).execute()
                 st.rerun()
-        st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
+        st.dataframe(pd.DataFrame(cargar("maquinas")))
 
-    # --- ÓRDENES (VERSION SIMPLIFICADA) ---
     elif opcion == "Órdenes":
-        st.header("📑 Nueva Orden de Trabajo")
+        st.header("📑 Crear Orden de Trabajo")
         
-        # Cargamos solo los nombres para las listas desplegables
-        lista_m = [m['nombre_maquina'] for m in cargar("maquinas")]
-        lista_t = [t['nombre'] for t in cargar("personal")]
+        m_data = cargar("maquinas")
+        t_data = cargar("personal")
+
+        # --- DETECTIVE DE IDs --- 
+        # Esta parte busca 'id', 'id_maquina' o cualquier cosa que sirva como ID
+        def buscar_id(registro):
+            for k in ['id', 'id_maquina', 'id_tecnico', 'ID']:
+                if k in registro: return registro[k]
+            return None
+
+        dict_m = {m.get('nombre_maquina', 'S/N'): buscar_id(m) for m in m_data}
+        dict_t = {t.get('nombre', 'S/N'): buscar_id(t) for t in t_data}
 
         with st.form("f_final"):
-            desc = st.text_area("Descripción de la tarea")
-            m_sel = st.selectbox("Seleccionar Máquina", lista_m if lista_m else ["No hay máquinas"])
-            t_sel = st.selectbox("Asignar Técnico", lista_t if lista_t else ["No hay técnicos"])
+            desc = st.text_area("Descripción")
+            m_sel = st.selectbox("Máquina", list(dict_m.keys()))
+            t_sel = st.selectbox("Técnico", list(dict_t.keys()))
             
             if st.form_submit_button("Lanzar Orden"):
-                try:
-                    # GUARDAMOS NOMBRES DIRECTAMENTE PARA EVITAR ERRORES DE ID
-                    supabase.table("ordenes").insert({
-                        "descripcion": desc,
-                        "id_maquina": 0, # Ponemos un 0 temporal si la columna es numérica
-                        "estado": "Proceso"
-                    }).execute()
-                    st.success("✅ ¡Orden creada exitosamente!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                id_m = dict_m.get(m_sel)
+                id_t = dict_t.get(t_sel)
 
-        # VISUALIZACIÓN
+                if id_m is None or id_t is None:
+                    st.error(f"❌ Error: No se encontró el ID interno. ID Máquina: {id_m}, ID Técnico: {id_t}")
+                else:
+                    try:
+                        # Enviamos los datos asegurándonos de que NO sean null
+                        supabase.table("ordenes").insert({
+                            "descripcion": desc,
+                            "id_maquina": id_m,
+                            "id_tecnico": id_t,
+                            "estado": "Proceso"
+                        }).execute()
+                        st.success("✅ ¡ORDEN CREADA!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error de Supabase: {e}")
+
+        # TABLERO
         ots = cargar("ordenes")
-        if ots:
-            st.subheader("Órdenes Actuales")
-            st.table(pd.DataFrame(ots)[["descripcion", "estado"]])
+        if ots: st.table(pd.DataFrame(ots)[["descripcion", "estado"]])
 
-    if st.sidebar.button("Cerrar Sesión"):
+    if st.sidebar.button("Salir"):
         st.session_state.auth = False
         st.rerun()
