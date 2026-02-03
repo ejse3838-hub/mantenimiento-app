@@ -14,9 +14,10 @@ menu = st.sidebar.selectbox("Menú", ["Iniciar Sesión", "Registrarse"])
 
 # Función para leer usuarios
 def cargar_usuarios():
-    # Esta línea debe usar la conexión configurada en los secrets
+    # Forzamos la conexión a usar la URL de los secrets
     conn = st.connection("gsheets", type=GSheetsConnection)
-    return conn.read(worksheet="Usuarios", ttl=0)
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    return conn.read(spreadsheet=url, worksheet="Usuarios", ttl=0)
     
 if menu == "Registrarse":
     st.subheader("Crear nueva cuenta")
@@ -54,3 +55,4 @@ elif menu == "Iniciar Sesión":
         else:
 
             st.error("Usuario o clave no encontrados.")
+
