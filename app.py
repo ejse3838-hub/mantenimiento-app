@@ -1,54 +1,105 @@
 import streamlit as st
 from supabase import create_client, Client
 
-# 1. Conexión (Ya la tienes bien)
+# Configuración inicial
+st.set_page_config(page_title="CORMAIN CMMS", layout="wide")
+
+# Conexión
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-def cargar_usuarios():
-    response = supabase.table("usuarios").select("*").execute()
-    return response.data
+# --- LÓGICA DE SESIÓN ---
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
 
-# --- LÓGICA DE NAVEGACIÓN ---
-if 'autenticado' not in st.session_state:
-    st.session_state.autenticado = False
-
-if not st.session_state.autenticado:
-    st.title("CORMAIN - Login")
-    email_input = st.text_input("Correo")
-    pass_input = st.text_input("Contraseña", type="password")
+if not st.session_state.auth:
+    st.title("Sistema CORMAIN")
+    tab1, tab2 = st.tabs(["Iniciar Sesión", "Registrarse"])
     
-    if st.button("Entrar"):
-        usuarios = cargar_usuarios()
-        if any(u['email'] == email_input and u['password'] == pass_input for u in usuarios):
-            st.session_state.autenticado = True
-            st.rerun()
-        else:
-            st.error("Credenciales incorrectas")
+    with tab1:
+        u = st.text_input("Correo")
+        p = st.text_input("Clave", type="password")
+        if st.button("Entrar"):
+            res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
+            if res.data:
+                st.session_state.auth = True
+                st.session_state.user = u
+                st.rerun()
+            else:
+                st.error("Credenciales incorrectas")
+                
+    with tab2:
+        new_u = st.text_input("Nuevo Correo")
+        new_p = st.text_input("Nueva Clave", type="password")
+        if st.button("Crear Cuenta"):
+            supabase.table("usuarios").insert({"email": new_u, "password": new_p}).execute()
+            st.success("¡Registrado! Ya puedes iniciar sesión.")
 
 else:
-    # --- AQUÍ EMPIEZA LO QUE TE FALTABA: EL MENÚ ---
-    st.sidebar.title("Menú Principal")
-    opcion = st.sidebar.selectbox(
-        "Seleccione una opción",
-        ["Inicio", "Recursos Humanos", "Órdenes de Trabajo", "Inventario"]
-    )
-
-    if opcion == "Inicio":
-        st.title("Bienvenido a CORMAIN")
-        st.write("Seleccione una opción en el menú de la izquierda para comenzar.")
-
-    elif opcion == "Recursos Humanos":
-        st.title("Gestión de Recursos Humanos")
-        # Aquí puedes poner tus st.text_input para nombres, cargos, etc.
-        st.write("Formulario de personal aquí...")
-
-    elif opcion == "Órdenes de Trabajo":
-        st.title("Órdenes de Trabajo")
-        # Aquí puedes poner el formulario para las órdenes
-        st.write("Registro de órdenes...")
-
+    # --- MENÚ PRINCIPAL ---
+    st.sidebar.title(f"Bienvenido")
+    st.sidebar.write(st.session_state.user)
+    opcion = st.sidebar.selectbox("Menú", ["RRHH", "Máquinas", "Órdenes de Trabajo"])
+    
     if st.sidebar.button("Cerrar Sesión"):
-        st.session_state.autenticado = False
+        st.session_state.auth = False
         st.rerun()
+
+    # --- SECCIÓN RRHH ---
+    if opcion == "RRHH":
+        st.header("Gestión de Personal")
+        with st.form("form_rrhh"):
+            nombre = st.text_input("Nombre Completo")
+            cargo = st.text_input("Cargo")
+            especialidad = st.text_input("Especialidad")
+            if st.form_submit_button("Guardar Empleado"):
+                supabase.table("personal").insert({"nombre": nombre, "cargo": cargo, "especialidad": especialidad}).execute()
+                st.success("Empleado registrado")
+
+    # --- SECCIÓN MÁQUINAS ---
+    elif opcion == "Máquinas":
+        st.header("Inventario de Equipos")
+        with st.form("form_maquina"):
+            nom_m = st.text_input("Nombre de la Máquina")
+            cod_m = st.text_input("Código/ID")
+            ubi_m = st.text_input("Ubicación")
+            if st.form_submit_button("Registrar Máquina"):
+                supabase.table("maquinas").insert({"nombre_maquina": nom_m, "codigo": cod_m, "ubicacion": ubi_m, "estado": "Activa"}).execute()
+                st.success("Máquina agregada")
+
+    # --- SECCIÓN ÓRDENES (FLUJO DE TRABAJO) ---
+    elif opcion == "Órdenes de Trabajo":
+        st.header("Flujo de Producción y Mantenimiento")
+        
+        # 1. Crear Orden
+        with st.expander("➕ Crear Nueva Orden"):
+            maquinas_res = supabase.table("maquinas").select("nombre_maquina").execute()
+            lista_m = [m['nombre_maquina'] for m in maquinas_res.data]
+            
+            desc = st.text_area("Descripción de la tarea")
+            maq_sel = st.selectbox("Asignar a Máquina", lista_m)
+            if st.button("Lanzar Orden"):
+                supabase.table("ordenes").insert({"descripcion": desc, "estado": "Proceso"}).execute()
+                st.rerun()
+
+        # 2. Visualización por estados (Tu flujo)
+        cols = st.columns(3)
+        estados = ["Proceso", "Revisión Jefe", "Finalizada"]
+        
+        for i, est in enumerate(estados):
+            with cols[i]:
+                st.subheader(f"📍 {est}")
+                ordenes = supabase.table("ordenes").select("*").eq("estado", est).execute()
+                for o in ordenes.data:
+                    with st.container(border=True):
+                        st.write(f"ID: {o['id']}")
+                        st.write(o['descripcion'])
+                        if est == "Proceso":
+                            if st.button(f"Enviar a Revisión", key=f"btn_{o['id']}"):
+                                supabase.table("ordenes").update({"estado": "Revisión Jefe"}).eq("id", o['id']).execute()
+                                st.rerun()
+                        elif est == "Revisión Jefe":
+                            if st.button(f"Finalizar Orden", key=f"btn_{o['id']}"):
+                                supabase.table("ordenes").update({"estado": "Finalizada"}).eq("id", o['id']).execute()
+                                st.rerun()
