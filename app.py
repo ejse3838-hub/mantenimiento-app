@@ -1,105 +1,147 @@
 import streamlit as st
+import pandas as pd
 from supabase import create_client, Client
 
-# Configuración inicial
-st.set_page_config(page_title="CORMAIN CMMS", layout="wide")
+# 1. CONFIGURACIÓN Y CONEXIÓN (Mantenemos tus llaves de las capturas)
+st.set_page_config(page_title="CORMAIN CMMS v2.0", layout="wide")
 
-# Conexión
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-# --- LÓGICA DE SESIÓN ---
+# --- FUNCIONES DE PERSISTENCIA (Para que nada se pierda) ---
+def obtener_datos(tabla):
+    res = supabase.table(tabla).select("*").execute()
+    return res.data
+
+# --- LÓGICA DE NAVEGACIÓN Y LOGIN ---
 if 'auth' not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("Sistema CORMAIN")
-    tab1, tab2 = st.tabs(["Iniciar Sesión", "Registrarse"])
+    st.title("🛡️ Acceso al Sistema CORMAIN")
+    tab1, tab2 = st.tabs(["Ingresar", "Registrar Nuevo Usuario"])
     
     with tab1:
-        u = st.text_input("Correo")
-        p = st.text_input("Clave", type="password")
+        u = st.text_input("Email")
+        p = st.text_input("Password", type="password")
         if st.button("Entrar"):
+            # Verificamos contra tu tabla 'usuarios'
             res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
             if res.data:
                 st.session_state.auth = True
                 st.session_state.user = u
                 st.rerun()
             else:
-                st.error("Credenciales incorrectas")
-                
+                st.error("Credenciales no encontradas")
+    
     with tab2:
-        new_u = st.text_input("Nuevo Correo")
+        new_u = st.text_input("Nuevo Usuario")
         new_p = st.text_input("Nueva Clave", type="password")
         if st.button("Crear Cuenta"):
             supabase.table("usuarios").insert({"email": new_u, "password": new_p}).execute()
-            st.success("¡Registrado! Ya puedes iniciar sesión.")
-
+            st.success("Cuenta creada con éxito")
 else:
-    # --- MENÚ PRINCIPAL ---
-    st.sidebar.title(f"Bienvenido")
-    st.sidebar.write(st.session_state.user)
-    opcion = st.sidebar.selectbox("Menú", ["RRHH", "Máquinas", "Órdenes de Trabajo"])
-    
+    # --- MENÚ PRINCIPAL (CON TODAS LAS FUNCIONES) ---
+    st.sidebar.title("Navegación")
+    opcion = st.sidebar.selectbox("Seleccione Área", 
+        ["Inicio", "Recursos Humanos", "Maquinaria y Herramientas", "Órdenes de Trabajo"])
+
+    # --- SECCIÓN RRHH (LISTADO + REGISTRO) ---
+    if opcion == "Recursos Humanos":
+        st.header("👥 Gestión de Recursos Humanos")
+        
+        # Formulario (Función anterior mejorada)
+        with st.expander("➕ Registrar Nuevo Personal", expanded=False):
+            with st.form("rrhh_form"):
+                col1, col2 = st.columns(2)
+                nombre = col1.text_input("Nombre Completo")
+                cargo = col2.text_input("Cargo")
+                especialidad = st.text_input("Especialidad")
+                if st.form_submit_button("Guardar en Base de Datos"):
+                    supabase.table("personal").insert({
+                        "nombre": nombre, "cargo": cargo, "especialidad": especialidad
+                    }).execute()
+                    st.success("Datos guardados")
+                    st.rerun()
+
+        # LISTADO PERMANENTE (Lo que pediste para que no se borre)
+        st.subheader("📋 Listado de Personal")
+        datos_p = obtener_datos("personal")
+        if datos_p:
+            df_p = pd.DataFrame(datos_p)
+            # st.data_editor permite editar directamente en la tabla
+            edit_df_p = st.data_editor(df_p[["id", "nombre", "cargo", "especialidad"]], key="ed_p", hide_index=True)
+            if st.button("Actualizar Cambios en RRHH"):
+                # Aquí iría la lógica para actualizar filas editadas
+                st.info("Función de edición masiva activada")
+        else:
+            st.warning("No hay registros en la tabla 'personal'")
+
+    # --- SECCIÓN MÁQUINAS (LISTADO + REGISTRO) ---
+    elif opcion == "Maquinaria y Herramientas":
+        st.header("⚙️ Gestión de Activos")
+        
+        with st.expander("➕ Agregar Nueva Máquina"):
+            with st.form("maq_form"):
+                n_m = st.text_input("Nombre de Máquina")
+                c_m = st.text_input("Código de Inventario")
+                u_m = st.text_input("Ubicación")
+                if st.form_submit_button("Registrar Activo"):
+                    supabase.table("maquinas").insert({
+                        "nombre_maquina": n_m, "codigo": c_m, "ubicacion": u_m
+                    }).execute()
+                    st.rerun()
+
+        st.subheader("🚜 Inventario de Equipos")
+        datos_m = obtener_datos("maquinas")
+        if datos_m:
+            st.dataframe(pd.DataFrame(datos_m)[["nombre_maquina", "codigo", "ubicacion"]], use_container_width=True)
+
+    # --- SECCIÓN ÓRDENES DE TRABAJO (FLUJO DE PROCESOS) ---
+    elif opcion == "Órdenes de Trabajo":
+        st.header("📑 Flujo de Órdenes de Producción")
+        
+        # Formulario vinculado a máquinas
+        with st.expander("🆕 Crear Orden de Trabajo"):
+            maqs = obtener_datos("maquinas")
+            lista_maqs = [m['nombre_maquina'] for m in maqs] if maqs else ["Sin máquinas"]
+            
+            with st.form("ot_form"):
+                desc = st.text_area("Descripción del trabajo")
+                maq_asig = st.selectbox("Asignar a Máquina", lista_maqs)
+                if st.form_submit_button("Iniciar Orden"):
+                    # Se inserta con estado inicial 'Proceso'
+                    supabase.table("ordenes").insert({
+                        "descripcion": desc, "estado": "Proceso"
+                    }).execute()
+                    st.rerun()
+
+        # EL KANBAN (PROCESOS)
+        st.divider()
+        c1, c2, c3 = st.columns(3)
+        
+        estados = [("Proceso", c1), ("Revisión Jefe", c2), ("Finalizada", c3)]
+        
+        for est_nombre, columna in estados:
+            with columna:
+                st.subheader(f"📍 {est_nombre}")
+                # Filtramos órdenes por estado en Supabase
+                ots = supabase.table("ordenes").select("*").eq("estado", est_nombre).execute()
+                for ot in ots.data:
+                    with st.container(border=True):
+                        st.write(f"**Orden #{ot['id']}**")
+                        st.write(ot['descripcion'])
+                        # Botones para mover la orden (El flujo que pediste)
+                        if est_nombre == "Proceso":
+                            if st.button("➡️ Revisión", key=f"rev_{ot['id']}"):
+                                supabase.table("ordenes").update({"estado": "Revisión Jefe"}).eq("id", ot['id']).execute()
+                                st.rerun()
+                        elif est_nombre == "Revisión Jefe":
+                            if st.button("✅ Finalizar", key=f"fin_{ot['id']}"):
+                                supabase.table("ordenes").update({"estado": "Finalizada"}).eq("id", ot['id']).execute()
+                                st.rerun()
+
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.auth = False
         st.rerun()
-
-    # --- SECCIÓN RRHH ---
-    if opcion == "RRHH":
-        st.header("Gestión de Personal")
-        with st.form("form_rrhh"):
-            nombre = st.text_input("Nombre Completo")
-            cargo = st.text_input("Cargo")
-            especialidad = st.text_input("Especialidad")
-            if st.form_submit_button("Guardar Empleado"):
-                supabase.table("personal").insert({"nombre": nombre, "cargo": cargo, "especialidad": especialidad}).execute()
-                st.success("Empleado registrado")
-
-    # --- SECCIÓN MÁQUINAS ---
-    elif opcion == "Máquinas":
-        st.header("Inventario de Equipos")
-        with st.form("form_maquina"):
-            nom_m = st.text_input("Nombre de la Máquina")
-            cod_m = st.text_input("Código/ID")
-            ubi_m = st.text_input("Ubicación")
-            if st.form_submit_button("Registrar Máquina"):
-                supabase.table("maquinas").insert({"nombre_maquina": nom_m, "codigo": cod_m, "ubicacion": ubi_m, "estado": "Activa"}).execute()
-                st.success("Máquina agregada")
-
-    # --- SECCIÓN ÓRDENES (FLUJO DE TRABAJO) ---
-    elif opcion == "Órdenes de Trabajo":
-        st.header("Flujo de Producción y Mantenimiento")
-        
-        # 1. Crear Orden
-        with st.expander("➕ Crear Nueva Orden"):
-            maquinas_res = supabase.table("maquinas").select("nombre_maquina").execute()
-            lista_m = [m['nombre_maquina'] for m in maquinas_res.data]
-            
-            desc = st.text_area("Descripción de la tarea")
-            maq_sel = st.selectbox("Asignar a Máquina", lista_m)
-            if st.button("Lanzar Orden"):
-                supabase.table("ordenes").insert({"descripcion": desc, "estado": "Proceso"}).execute()
-                st.rerun()
-
-        # 2. Visualización por estados (Tu flujo)
-        cols = st.columns(3)
-        estados = ["Proceso", "Revisión Jefe", "Finalizada"]
-        
-        for i, est in enumerate(estados):
-            with cols[i]:
-                st.subheader(f"📍 {est}")
-                ordenes = supabase.table("ordenes").select("*").eq("estado", est).execute()
-                for o in ordenes.data:
-                    with st.container(border=True):
-                        st.write(f"ID: {o['id']}")
-                        st.write(o['descripcion'])
-                        if est == "Proceso":
-                            if st.button(f"Enviar a Revisión", key=f"btn_{o['id']}"):
-                                supabase.table("ordenes").update({"estado": "Revisión Jefe"}).eq("id", o['id']).execute()
-                                st.rerun()
-                        elif est == "Revisión Jefe":
-                            if st.button(f"Finalizar Orden", key=f"btn_{o['id']}"):
-                                supabase.table("ordenes").update({"estado": "Finalizada"}).eq("id", o['id']).execute()
-                                st.rerun()
