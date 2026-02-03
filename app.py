@@ -1,46 +1,53 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# Configuración
+# Configuración de la página
 st.set_page_config(page_title="CORMAIN", page_icon="🛠️")
 st.title("🛠️ CORMAIN")
 
-# Link del Excel (el mismo de tus secrets)
-URL = "https://docs.google.com/spreadsheets/d/1j9BYnypEdWlsIIoXgTCkLwb_Mq9YoTrlZRNc6KPZzsk/export?format=csv&gid=0"
+# Conectamos con el Robot (usa los Secrets que ya pegaste)
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-def cargar_datos():
-    try:
-        # Leemos el Excel como un CSV público
-        df = pd.read_csv(URL)
-        # Limpiamos nombres de columnas y datos (quita espacios y pone en minúsculas)
-        df.columns = df.columns.str.strip().str.lower()
-        df['username'] = df['username'].astype(str).str.strip()
-        df['password'] = df['password'].astype(str).str.strip()
-        return df
-    except Exception as e:
-        st.error(f"Error al leer la base de datos: {e}")
-        return None
-
+# Menú lateral
 menu = st.sidebar.selectbox("Menú", ["Iniciar Sesión", "Registrarse"])
 
-if menu == "Iniciar Sesión":
-    st.subheader("Acceso de Usuario")
-    u = st.text_input("Usuario (Correo)").strip()
-    p = st.text_input("Contraseña", type="password").strip()
+# Función para leer usuarios
+def cargar_usuarios():
+    return conn.read(worksheet="Usuarios", ttl=0)
+
+if menu == "Registrarse":
+    st.subheader("Crear nueva cuenta")
+    with st.form("form_registro"):
+        nombre = st.text_input("Nombre Completo")
+        usuario = st.text_input("Usuario (Correo)")
+        clave = st.text_input("Contraseña", type="password")
+        boton = st.form_submit_button("Registrarme en CORMAIN")
+
+    if boton:
+        if nombre and usuario and clave:
+            df_actual = cargar_usuarios()
+            # Creamos la nueva fila
+            nuevo_dato = pd.DataFrame([{"name": nombre, "username": usuario, "password": clave}])
+            # La unimos a la tabla actual
+            df_final = pd.concat([df_actual, nuevo_dato], ignore_index=True)
+            # ¡EL ROBOT ESCRIBE EN EL EXCEL!
+            conn.update(worksheet="Usuarios", data=df_final)
+            st.success(f"✅ ¡Excelente! {nombre}, ya estás en la base de datos.")
+            st.balloons()
+        else:
+            st.warning("Por favor, llena todos los campos.")
+
+elif menu == "Iniciar Sesión":
+    st.subheader("Acceso Personal")
+    u = st.text_input("Usuario")
+    p = st.text_input("Contraseña", type="password")
     
     if st.button("Entrar"):
-        df = cargar_datos()
-        if df is not None:
-            # Buscamos coincidencia exacta
-            match = df[(df['username'] == u) & (df['password'] == p)]
-            
-            if not match.empty:
-                st.success(f"✅ ¡Bienvenido {match.iloc[0]['name']}!")
-                st.balloons()
-            else:
-                st.error("❌ No te encontré. Revisa que el usuario y clave sean iguales al Excel.")
-                # Muestra lo que la app está viendo (solo para pruebas)
-                st.write("Usuarios en la base de datos:", df[['name', 'username']])
-
-elif menu == "Registrarse":
-    st.info("Para registrarte, por ahora escríbelo en el Excel mientras arreglamos el permiso de escritura.")
+        df = cargar_usuarios()
+        # Buscamos si existe
+        check = df[(df['username'] == u) & (df['password'] == p)]
+        if not check.empty:
+            st.success(f"Bienvenido de nuevo, {check.iloc[0]['name']}")
+        else:
+            st.error("Usuario o clave no encontrados.")
