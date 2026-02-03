@@ -1,11 +1,8 @@
 import streamlit as st
 from supabase import create_client, Client
 
-# Configuración de la página
-st.set_page_config(page_title="CORMAIN - Mantenimiento", layout="centered")
-
 # 1. Conexión con Supabase usando tus Secrets
-# Asegúrate de tener SUPABASE_URL y SUPABASE_KEY en tus Secrets de Streamlit
+# El código buscará estos datos en la pestaña de Secrets de Streamlit
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
@@ -16,13 +13,11 @@ def cargar_usuarios():
         response = supabase.table("usuarios").select("*").execute()
         return response.data
     except Exception as e:
-        st.error(# Error si la tabla no existe o RLS está activado
-            f"Error al conectar con la base de datos: {e}")
         return []
 
 st.title("Sistema de Mantenimiento CORMAIN")
 
-# Lógica de Inicio de Sesión (Login)
+# Lógica de Login
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
@@ -33,20 +28,17 @@ if not st.session_state.autenticado:
     
     if st.button("Entrar"):
         usuarios = cargar_usuarios()
-        # Verificamos si los datos coinciden con lo que pusiste en la tabla de Supabase
+        # Verificamos si los datos coinciden con lo que pusiste en la tabla
         usuario_valido = any(u['email'] == email_input and u['password'] == pass_input for u in usuarios)
         
         if usuario_valido:
             st.session_state.autenticado = True
+            st.session_state.email = email_input
             st.rerun()
         else:
-            st.error("Correo o contraseña incorrectos. Verifica en Supabase.")
+            st.error("Correo o contraseña incorrectos. Revisa tu tabla en Supabase.")
 else:
-    st.success(f"Bienvenido al sistema, {st.session_state.get('email', 'Usuario')}")
-    
-    # Aquí irá el resto de tu aplicación de mantenimiento
-    st.info("Panel de control de mantenimiento activo.")
-    
+    st.success(f"Bienvenido al sistema, {st.session_state.email}")
     if st.button("Cerrar Sesión"):
         st.session_state.autenticado = False
         st.rerun()
