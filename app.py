@@ -14,10 +14,10 @@ menu = st.sidebar.selectbox("Menú", ["Iniciar Sesión", "Registrarse"])
 
 # Función para leer usuarios
 def cargar_usuarios():
-    # Forzamos la conexión a usar la URL de los secrets
+    # Usamos la conexión estándar de Streamlit
     conn = st.connection("gsheets", type=GSheetsConnection)
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    return conn.read(spreadsheet=url, worksheet="Usuarios", ttl=0)
+    # Le pasamos la URL que guardamos en los Secrets
+    return conn.read(spreadsheet=st.secrets["connections"]["gsheets"]["spreadsheet"], worksheet="Usuarios", ttl=0)
     
 if menu == "Registrarse":
     st.subheader("Crear nueva cuenta")
@@ -55,4 +55,5 @@ elif menu == "Iniciar Sesión":
         else:
 
             st.error("Usuario o clave no encontrados.")
+
 
