@@ -46,7 +46,7 @@ else:
     opcion = st.sidebar.selectbox("Seleccione Área", 
         ["Inicio", "Recursos Humanos", "Maquinaria y Herramientas", "Órdenes de Trabajo"])
 
-    # --- SECCIÓN RRHH (CON EDICIÓN) ---
+    # --- SECCIÓN RRHH (CON EDICIÓN DIRECTA) ---
     if opcion == "Recursos Humanos":
         st.header("👥 Gestión de Recursos Humanos")
         with st.expander("➕ Registrar Nuevo Personal"):
@@ -62,12 +62,12 @@ else:
         datos_p = obtener_datos("personal")
         if datos_p:
             df_p = pd.DataFrame(datos_p)
-            # Solo mostramos columnas que existen
-            cols = [c for c in ["nombre", "cargo", "especialidad"] if c in df_p.columns]
-            st.data_editor(df_p[cols], key="edit_rrhh", use_container_width=True)
-            st.info("💡 Haz doble clic en una celda para editar el nombre o cargo.")
+            # Filtramos columnas existentes para evitar KeyError
+            cols_visibles = [c for c in ["nombre", "cargo", "especialidad"] if c in df_p.columns]
+            st.data_editor(df_p[cols_visibles], key="edit_rrhh", use_container_width=True)
+            st.info("💡 Haz doble clic en cualquier celda para corregir nombres o cargos.")
 
-    # --- SECCIÓN MÁQUINAS (CON EDICIÓN) ---
+    # --- SECCIÓN MÁQUINAS (CON EDICIÓN DIRECTA) ---
     elif opcion == "Maquinaria y Herramientas":
         st.header("⚙️ Gestión de Activos")
         with st.expander("➕ Agregar Nueva Máquina"):
@@ -79,29 +79,20 @@ else:
                     supabase.table("maquinas").insert({"nombre_maquina": n_m, "codigo": c_m, "ubicacion": u_m}).execute()
                     st.rerun()
 
-        st.subheader("🚜 Inventario (Editable)")
+        st.subheader("🚜 Inventario de Equipos (Editable)")
         datos_m = obtener_datos("maquinas")
         if datos_m:
             df_m = pd.DataFrame(datos_m)
-            # Solo mostramos columnas que existen
             cols_m = [c for c in ["nombre_maquina", "codigo", "ubicacion"] if c in df_m.columns]
             st.data_editor(df_m[cols_m], key="edit_maq", use_container_width=True)
-            st.info("💡 Puedes corregir nombres de máquinas directamente en la tabla.")
 
-    # --- SECCIÓN ÓRDENES DE TRABAJO (CORREGIDA) ---
+    # --- SECCIÓN ÓRDENES DE TRABAJO (CORRECCIÓN FINAL) ---
     elif opcion == "Órdenes de Trabajo":
         st.header("📑 Flujo de Producción")
         
+        # 1. Obtenemos máquinas y sus IDs correctamente
         maqs_db = obtener_datos("maquinas")
-        # CORRECCIÓN: Manejamos si no existe la columna 'id' para evitar el KeyError
-        dict_maquinas = {}
-        if maqs_db:
-            for m in maqs_db:
-                nombre_m = m.get('nombre_maquina', 'Sin nombre')
-                # Si no hay 'id', usamos el nombre como referencia para evitar el error
-                id_m = m.get('id', nombre_m) 
-                dict_maquinas[nombre_m] = id_m
-
+        dict_maquinas = {m['nombre_maquina']: m.get('id') for m in maqs_db} if maqs_db else {}
         lista_nombres = list(dict_maquinas.keys()) if dict_maquinas else ["Sin máquinas"]
 
         with st.expander("🆕 Crear Orden"):
@@ -110,12 +101,14 @@ else:
                 maq_asig = st.selectbox("Asignar a Máquina", lista_nombres)
                 if st.form_submit_button("Iniciar"):
                     if desc and maq_asig != "Sin máquinas":
-                        # Enviamos id_maquina solo si la tabla lo requiere
-                        ins_data = {"descripcion": desc, "estado": "Proceso"}
-                        if 'id' in maqs_db[0]: # Solo si detectamos IDs reales
-                            ins_data["id_maquina"] = dict_maquinas[maq_asig]
-                        
-                        supabase.table("ordenes").insert(ins_data).execute()
+                        id_m = dict_maquinas[maq_asig]
+                        # Aseguramos que id_maquina se envíe para evitar el APIError
+                        supabase.table("ordenes").insert({
+                            "descripcion": desc, 
+                            "estado": "Proceso",
+                            "id_maquina": id_m
+                        }).execute()
+                        st.success("✅ Orden lanzada")
                         st.rerun()
 
         # KANBAN
@@ -127,15 +120,16 @@ else:
                 ots = supabase.table("ordenes").select("*").eq("estado", est).execute()
                 for ot in ots.data:
                     with st.container(border=True):
-                        st.write(f"**OT: {ot.get('id', 'N/A')}**")
+                        st.write(f"**OT #{ot.get('id', 'N/A')}**")
                         st.write(ot['descripcion'])
+                        # Movimiento de estados
                         if est == "Proceso":
-                            if st.button("➡️ Revisión", key=f"r{ot.get('id', ot['descripcion'])}"):
-                                supabase.table("ordenes").update({"estado": "Revisión Jefe"}).eq("descripcion", ot['descripcion']).execute()
+                            if st.button("➡️ Revisión", key=f"r{ot['id']}"):
+                                supabase.table("ordenes").update({"estado": "Revisión Jefe"}).eq("id", ot['id']).execute()
                                 st.rerun()
                         elif est == "Revisión Jefe":
-                            if st.button("✅ Finalizar", key=f"f{ot.get('id', ot['descripcion'])}"):
-                                supabase.table("ordenes").update({"estado": "Finalizada"}).eq("descripcion", ot['descripcion']).execute()
+                            if st.button("✅ Finalizar", key=f"f{ot['id']}"):
+                                supabase.table("ordenes").update({"estado": "Finalizada"}).eq("id", ot['id']).execute()
                                 st.rerun()
 
     if st.sidebar.button("Cerrar Sesión"):
