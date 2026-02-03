@@ -14,14 +14,13 @@ def obtener_datos(tabla):
     res = supabase.table(tabla).select("*").execute()
     return res.data
 
-# --- LÓGICA DE NAVEGACIÓN Y LOGIN ---
+# --- LÓGICA DE LOGIN ---
 if 'auth' not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
     st.title("🛡️ Acceso al Sistema CORMAIN")
     tab1, tab2 = st.tabs(["Ingresar", "Registrar Nuevo Usuario"])
-    
     with tab1:
         u = st.text_input("Email")
         p = st.text_input("Password", type="password")
@@ -33,45 +32,40 @@ if not st.session_state.auth:
                 st.rerun()
             else:
                 st.error("Credenciales no encontradas")
-    
     with tab2:
         new_u = st.text_input("Nuevo Usuario")
         new_p = st.text_input("Nueva Clave", type="password")
         if st.button("Crear Cuenta"):
             supabase.table("usuarios").insert({"email": new_u, "password": new_p}).execute()
-            st.success("Cuenta creada con éxito")
+            st.success("Cuenta creada")
 else:
     # --- MENÚ PRINCIPAL ---
     st.sidebar.title("Navegación")
     opcion = st.sidebar.selectbox("Seleccione Área", 
         ["Inicio", "Recursos Humanos", "Maquinaria y Herramientas", "Órdenes de Trabajo"])
 
-    # --- SECCIÓN RRHH (CON EDICIÓN DIRECTA) ---
+    # --- SECCIÓN RRHH (EDITABLE) ---
     if opcion == "Recursos Humanos":
         st.header("👥 Gestión de Recursos Humanos")
         with st.expander("➕ Registrar Nuevo Personal"):
             with st.form("rrhh_form"):
                 nombre = st.text_input("Nombre Completo")
                 cargo = st.text_input("Cargo")
-                especialidad = st.text_input("Especialidad")
+                esp = st.text_input("Especialidad")
                 if st.form_submit_button("Guardar"):
-                    supabase.table("personal").insert({
-                        "nombre": nombre, "cargo": cargo, "especialidad": especialidad
-                    }).execute()
+                    supabase.table("personal").insert({"nombre": nombre, "cargo": cargo, "especialidad": esp}).execute()
                     st.rerun()
 
-        st.subheader("📋 Listado de Personal (Haz clic para editar)")
+        st.subheader("📋 Listado de Personal (Edición habilitada)")
         datos_p = obtener_datos("personal")
         if datos_p:
             df_p = pd.DataFrame(datos_p)
-            # Solo mostramos columnas que existen en tu tabla
-            cols_visibles = [c for c in ["nombre", "cargo", "especialidad"] if c in df_p.columns]
-            # st.data_editor permite corregir nombres directamente
-            st.data_editor(df_p[cols_visibles], key="edit_rrhh", use_container_width=True)
-        else:
-            st.warning("No hay registros")
+            # Solo mostramos lo que existe para evitar KeyError
+            cols = [c for c in ["nombre", "cargo", "especialidad"] if c in df_p.columns]
+            st.data_editor(df_p[cols], use_container_width=True, key="edit_p")
+            st.info("💡 Haz doble clic en una celda para corregir un nombre o cargo.")
 
-    # --- SECCIÓN MÁQUINAS (CON EDICIÓN DIRECTA) ---
+    # --- SECCIÓN MÁQUINAS (EDITABLE) ---
     elif opcion == "Maquinaria y Herramientas":
         st.header("⚙️ Gestión de Activos")
         with st.expander("➕ Agregar Nueva Máquina"):
@@ -80,45 +74,41 @@ else:
                 c_m = st.text_input("Código")
                 u_m = st.text_input("Ubicación")
                 if st.form_submit_button("Registrar"):
-                    supabase.table("maquinas").insert({
-                        "nombre_maquina": n_m, "codigo": c_m, "ubicacion": u_m
-                    }).execute()
+                    supabase.table("maquinas").insert({"nombre_maquina": n_m, "codigo": c_m, "ubicacion": u_m}).execute()
                     st.rerun()
 
-        st.subheader("🚜 Inventario de Equipos (Haz clic para editar)")
+        st.subheader("🚜 Inventario (Edición habilitada)")
         datos_m = obtener_datos("maquinas")
         if datos_m:
             df_m = pd.DataFrame(datos_m)
-            # st.data_editor permite corregir datos de máquinas
             cols_m = [c for c in ["nombre_maquina", "codigo", "ubicacion"] if c in df_m.columns]
-            st.data_editor(df_m[cols_m], key="edit_maq", use_container_width=True)
+            st.data_editor(df_m[cols_m], use_container_width=True, key="edit_m")
 
-    # --- SECCIÓN ÓRDENES DE TRABAJO (CORREGIDA SIN APIERROR) ---
+    # --- SECCIÓN ÓRDENES DE TRABAJO (CORRECCIÓN APIERROR) ---
     elif opcion == "Órdenes de Trabajo":
         st.header("📑 Flujo de Órdenes de Producción")
         
-        # Obtenemos máquinas y sus IDs para el selector
+        # 1. Cargamos máquinas y mapeamos sus IDs para el insert
         maqs_db = obtener_datos("maquinas")
-        dict_maquinas = {m['nombre_maquina']: m.get('id') for m in maqs_db} if maqs_db else {}
-        lista_nombres = list(dict_maquinas.keys()) if dict_maquinas else ["Sin máquinas registradas"]
+        # Diccionario seguro que evita el KeyError de las imágenes anteriores
+        dict_maquinas = {m['nombre_maquina']: m.get('id', m.get('id_maquina')) for m in maqs_db} if maqs_db else {}
+        lista_nombres = list(dict_maquinas.keys()) if dict_maquinas else ["Sin máquinas"]
 
         with st.expander("🆕 Crear Orden de Trabajo"):
             with st.form("ot_form"):
                 desc = st.text_area("Descripción del trabajo")
-                maq_asig = st.selectbox("Asignar a Máquina", lista_nombres)
+                maq_sel = st.selectbox("Asignar a Máquina", lista_nombres)
                 if st.form_submit_button("Iniciar Orden"):
-                    if desc and maq_asig != "Sin máquinas registradas":
-                        id_m = dict_maquinas[maq_asig]
-                        # Enviamos id_maquina para cumplir con la estructura de la tabla
+                    if desc and maq_sel != "Sin máquinas":
+                        # Enviamos el ID real de la máquina para evitar el APIError
+                        id_final = dict_maquinas[maq_sel]
                         supabase.table("ordenes").insert({
                             "descripcion": desc, 
                             "estado": "Proceso",
-                            "id_maquina": id_m
+                            "id_maquina": id_final
                         }).execute()
                         st.success("✅ Orden lanzada correctamente")
                         st.rerun()
-                    else:
-                        st.error("Por favor, escribe una descripción y selecciona una máquina.")
 
         # TABLERO KANBAN
         st.divider()
@@ -129,9 +119,9 @@ else:
                 ots = supabase.table("ordenes").select("*").eq("estado", est).execute()
                 for ot in ots.data:
                     with st.container(border=True):
-                        st.write(f"**OT #{ot['id']}**")
+                        st.write(f"**Orden #{ot.get('id', 'N/A')}**")
                         st.write(ot['descripcion'])
-                        # Movimiento de la orden entre columnas
+                        # Botones de flujo
                         if est == "Proceso":
                             if st.button("➡️ Revisión", key=f"r_{ot['id']}"):
                                 supabase.table("ordenes").update({"estado": "Revisión Jefe"}).eq("id", ot['id']).execute()
