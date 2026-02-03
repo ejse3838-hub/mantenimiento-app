@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
-# 1. CONFIGURACIÓN Y CONEXIÓN (Mantenemos tus llaves de las capturas)
+# 1. CONFIGURACIÓN Y CONEXIÓN
 st.set_page_config(page_title="CORMAIN CMMS v2.0", layout="wide")
 
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-# --- FUNCIONES DE PERSISTENCIA (Para que nada se pierda) ---
+# --- FUNCIONES DE PERSISTENCIA ---
 def obtener_datos(tabla):
     res = supabase.table(tabla).select("*").execute()
     return res.data
@@ -26,7 +26,6 @@ if not st.session_state.auth:
         u = st.text_input("Email")
         p = st.text_input("Password", type="password")
         if st.button("Entrar"):
-            # Verificamos contra tu tabla 'usuarios'
             res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
             if res.data:
                 st.session_state.auth = True
@@ -42,16 +41,14 @@ if not st.session_state.auth:
             supabase.table("usuarios").insert({"email": new_u, "password": new_p}).execute()
             st.success("Cuenta creada con éxito")
 else:
-    # --- MENÚ PRINCIPAL (CON TODAS LAS FUNCIONES) ---
+    # --- MENÚ PRINCIPAL ---
     st.sidebar.title("Navegación")
     opcion = st.sidebar.selectbox("Seleccione Área", 
         ["Inicio", "Recursos Humanos", "Maquinaria y Herramientas", "Órdenes de Trabajo"])
 
-    # --- SECCIÓN RRHH (LISTADO + REGISTRO) ---
+    # --- SECCIÓN RRHH ---
     if opcion == "Recursos Humanos":
         st.header("👥 Gestión de Recursos Humanos")
-        
-        # Formulario (Función anterior mejorada)
         with st.expander("➕ Registrar Nuevo Personal", expanded=False):
             with st.form("rrhh_form"):
                 col1, col2 = st.columns(2)
@@ -65,22 +62,17 @@ else:
                     st.success("Datos guardados")
                     st.rerun()
 
-        # LISTADO PERMANENTE
         st.subheader("📋 Listado de Personal")
         datos_p = obtener_datos("personal")
         if datos_p:
             df_p = pd.DataFrame(datos_p)
-            # CORRECCIÓN AQUÍ: Quitamos "id" porque no existe en la tabla
-            edit_df_p = st.data_editor(df_p[["nombre", "cargo", "especialidad"]], key="ed_p", hide_index=True)
-            if st.button("Actualizar Cambios en RRHH"):
-                st.info("Función de edición masiva activada")
+            st.data_editor(df_p[["nombre", "cargo", "especialidad"]], key="ed_p", hide_index=True)
         else:
             st.warning("No hay registros en la tabla 'personal'")
 
-    # --- SECCIÓN MÁQUINAS (LISTADO + REGISTRO) ---
+    # --- SECCIÓN MÁQUINAS ---
     elif opcion == "Maquinaria y Herramientas":
         st.header("⚙️ Gestión de Activos")
-        
         with st.expander("➕ Agregar Nueva Máquina"):
             with st.form("maq_form"):
                 n_m = st.text_input("Nombre de Máquina")
@@ -97,43 +89,39 @@ else:
         if datos_m:
             st.dataframe(pd.DataFrame(datos_m)[["nombre_maquina", "codigo", "ubicacion"]], use_container_width=True)
 
-   # --- SECCIÓN ÓRDENES DE TRABAJO (REEMPLAZAR DESDE AQUÍ) ---
+    # --- SECCIÓN ÓRDENES DE TRABAJO (CORREGIDA) ---
     elif opcion == "Órdenes de Trabajo":
         st.header("📑 Flujo de Órdenes de Producción")
         
-        # 1. Obtener datos de máquinas para el selector
-        maqs_data = obtener_datos("maquinas")
-        # Creamos un diccionario para convertir el nombre de la máquina en su ID real
-        dict_maquinas = {m['nombre_maquina']: m['id'] for m in maqs_data} if maqs_data else {}
-        lista_nombres_maqs = list(dict_maquinas.keys()) if dict_maquinas else ["Sin máquinas registradas"]
-
-        # Formulario para crear la orden
-        with st.expander("🆕 Crear Orden de Trabajo", expanded=True):
+        # PASO 1: Obtener máquinas y crear un buscador de IDs
+        maqs_db = obtener_datos("maquinas")
+        # Creamos un diccionario: { "Torno CNC": 1, "Taladro": 2 }
+        dict_maquinas = {m['nombre_maquina']: m['id'] for m in maqs_db} if maqs_db else {}
+        lista_nombres = list(dict_maquinas.keys()) if dict_maquinas else ["Sin máquinas"]
+            
+        with st.expander("🆕 Crear Orden de Trabajo"):
             with st.form("ot_form"):
                 desc = st.text_area("Descripción del trabajo")
-                maq_sel = st.selectbox("Asignar a Máquina", lista_nombres_maqs)
+                maq_asig = st.selectbox("Asignar a Máquina", lista_nombres)
                 
                 if st.form_submit_button("Iniciar Orden"):
-                    if desc and maq_sel != "Sin máquinas registradas":
-                        # Obtenemos el ID numérico de la máquina seleccionada
-                        id_m = dict_maquinas[maq_sel]
+                    if desc and maq_asig != "Sin máquinas":
+                        # PASO 2: Usar el ID real de la máquina para el insert
+                        id_maquina_real = dict_maquinas[maq_asig]
                         
-                        # INSERT CORREGIDO: Ahora enviamos el id_maquina para evitar el error de API
                         supabase.table("ordenes").insert({
                             "descripcion": desc, 
                             "estado": "Proceso",
-                            "id_maquina": id_m  
+                            "id_maquina": id_maquina_real  # Esto arregla el APIError
                         }).execute()
-                        st.success("✅ Orden lanzada a producción")
+                        st.success("Orden creada correctamente")
                         st.rerun()
                     else:
-                        st.warning("Escribe una descripción y selecciona una máquina válida.")
+                        st.error("Faltan datos o no hay máquinas")
 
-        # EL KANBAN (PROCESOS) - Mantenemos el resto igual para que veas tus tarjetas
+        # EL KANBAN
         st.divider()
         c1, c2, c3 = st.columns(3)
-        # ... (aquí sigue el resto de tu código de columnas de proceso)
-        
         estados = [("Proceso", c1), ("Revisión Jefe", c2), ("Finalizada", c3)]
         
         for est_nombre, columna in estados:
@@ -156,4 +144,3 @@ else:
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.auth = False
         st.rerun()
-
