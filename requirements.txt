@@ -1,4 +1,2 @@
 streamlit
-pandas
-streamlit-authenticator
-st-gsheets-connection==0.0.36
+st-gsheets-connection
