@@ -2,129 +2,87 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
-# 1. CONFIGURACIÓN DE PÁGINA Y CONEXIÓN
-st.set_page_config(page_title="CORMAIN CMMS v3.0", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="CORMAIN CMMS FINAL", layout="wide")
 
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-# --- FUNCIONES DE PERSISTENCIA ---
-def obtener_datos(tabla):
+# --- CARGA DE DATOS SEGURA ---
+def cargar_datos(tabla):
     try:
         res = supabase.table(tabla).select("*").execute()
         return res.data if res.data else []
-    except Exception as e:
-        st.error(f"Error al conectar con {tabla}: {e}")
+    except:
         return []
 
-# --- LÓGICA DE ACCESO ---
-if 'auth' not in st.session_state:
-    st.session_state.auth = False
-
+# --- LOGIN ---
+if 'auth' not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
-    st.title("🛡️ Sistema de Mantenimiento CORMAIN")
-    tab1, tab2 = st.tabs(["Ingresar", "Registrar Usuario"])
-    with tab1:
-        u = st.text_input("Email")
-        p = st.text_input("Password", type="password")
-        if st.button("Entrar"):
-            res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
-            if res.data:
-                st.session_state.auth = True
-                st.session_state.user = u
-                st.rerun()
-            else:
-                st.error("Credenciales incorrectas")
-    with tab2:
-        new_u = st.text_input("Nuevo Email")
-        new_p = st.text_input("Nueva Clave", type="password")
-        if st.button("Crear Cuenta"):
-            supabase.table("usuarios").insert({"email": new_u, "password": new_p}).execute()
-            st.success("Cuenta creada con éxito")
+    st.title("🛡️ Acceso CORMAIN")
+    u, p = st.text_input("Usuario"), st.text_input("Clave", type="password")
+    if st.button("Entrar"):
+        res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
+        if res.data: 
+            st.session_state.auth = True
+            st.rerun()
 else:
-    # --- MENÚ DE NAVEGACIÓN ---
-    st.sidebar.title(f"Bienvenido")
-    st.sidebar.write(f"👤 {st.session_state.user}")
-    opcion = st.sidebar.selectbox("Seleccione Área", 
-        ["Inicio", "Recursos Humanos", "Maquinaria", "Órdenes de Trabajo"])
+    opcion = st.sidebar.selectbox("Área", ["Inicio", "RRHH", "Maquinaria", "Órdenes"])
 
-    # --- SECCIÓN INICIO ---
-    if opcion == "Inicio":
-        st.header("📊 Resumen General")
-        ots = obtener_datos("ordenes")
-        if ots:
-            df_ots = pd.DataFrame(ots)
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Órdenes", len(df_ots))
-            c2.metric("En Proceso", len(df_ots[df_ots['estado'] == 'Proceso']))
-            c3.metric("Finalizadas", len(df_ots[df_ots['estado'] == 'Finalizada']))
-
-    # --- SECCIÓN RRHH (EDITABLE) ---
-    elif opcion == "Recursos Humanos":
+    # --- RRHH ---
+    if opcion == "RRHH":
         st.header("👥 Gestión de Personal")
-        with st.expander("➕ Registrar Nuevo Personal"):
-            with st.form("rrhh_form"):
-                nombre = st.text_input("Nombre Completo")
-                cargo = st.text_input("Cargo")
-                if st.form_submit_button("Guardar"):
-                    supabase.table("personal").insert({"nombre": nombre, "cargo": cargo}).execute()
-                    st.rerun()
+        with st.form("f_rrhh"):
+            nom = st.text_input("Nombre")
+            car = st.text_input("Cargo")
+            if st.form_submit_button("Guardar"):
+                supabase.table("personal").insert({"nombre": nom, "cargo": car}).execute()
+                st.rerun()
+        df_p = pd.DataFrame(cargar_datos("personal"))
+        if not df_p.empty: st.data_editor(df_p, use_container_width=True)
 
-        st.subheader("📋 Listado (Doble clic para editar)")
-        datos_p = obtener_datos("personal")
-        if datos_p:
-            df_p = pd.DataFrame(datos_p)
-            # Evitamos mostrar columnas técnicas de Supabase
-            cols_p = [c for c in ["id", "nombre", "cargo"] if c in df_p.columns]
-            st.data_editor(df_p[cols_p], key="edit_rrhh", use_container_width=True)
-
-    # --- SECCIÓN MAQUINARIA (EDITABLE) ---
+    # --- MAQUINARIA ---
     elif opcion == "Maquinaria":
         st.header("⚙️ Gestión de Activos")
-        with st.expander("➕ Agregar Nueva Máquina"):
-            with st.form("maq_form"):
-                n_m = st.text_input("Nombre de Máquina")
-                c_m = st.text_input("Código")
-                if st.form_submit_button("Registrar"):
-                    supabase.table("maquinas").insert({"nombre_maquina": n_m, "codigo": c_m}).execute()
+        with st.form("f_maq"):
+            n_m = st.text_input("Nombre Máquina")
+            c_m = st.text_input("Código")
+            if st.form_submit_button("Registrar"):
+                supabase.table("maquinas").insert({"nombre_maquina": n_m, "codigo": c_m}).execute()
+                st.rerun()
+        df_m = pd.DataFrame(cargar_datos("maquinas"))
+        if not df_m.empty: st.data_editor(df_m, use_container_width=True)
+
+    # --- ÓRDENES (EL CORAZÓN DEL PROBLEMA) ---
+    elif opcion == "Órdenes":
+        st.header("📑 Órdenes de Producción")
+        
+        # Obtenemos los IDs reales de las otras tablas
+        maqs = cargar_datos("maquinas")
+        tecs = cargar_datos("personal")
+        
+        # Diccionarios blindados contra KeyError
+        dict_m = {m.get('nombre_maquina', 'S/N'): m.get('id') for m in maqs}
+        dict_t = {t.get('nombre', 'S/N'): t.get('id') for t in tecs}
+
+        with st.form("f_ot"):
+            desc = st.text_area("Descripción")
+            m_sel = st.selectbox("Máquina", list(dict_m.keys()))
+            t_sel = st.selectbox("Asignar a", list(dict_t.keys()))
+            if st.form_submit_button("Lanzar Orden"):
+                # Enviamos solo lo básico para que el Default Value de Supabase trabaje
+                try:
+                    supabase.table("ordenes").insert({
+                        "descripcion": desc,
+                        "id_maquina": dict_m[m_sel],
+                        "id_tecnico": dict_t[t_sel],
+                        "estado": "Proceso"
+                    }).execute()
+                    st.success("✅ ¡Orden creada!")
                     st.rerun()
-
-        st.subheader("🚜 Inventario de Equipos")
-        datos_m = obtener_datos("maquinas")
-        if datos_m:
-            df_m = pd.DataFrame(datos_m)
-            cols_m = [c for c in ["id", "nombre_maquina", "codigo"] if c in df_m.columns]
-            st.data_editor(df_m[cols_m], key="edit_maq", use_container_width=True)
-
-    # --- SECCIÓN ÓRDENES (CON CORRECCIÓN DE IDS Y APIERROR) ---
-    elif opcion == "Órdenes de Trabajo":
-        st.header("📑 Flujo de Producción")
-        
-        # Obtenemos máquinas y personal para mapear IDs
-        maqs_db = obtener_datos("maquinas")
-        pers_db = obtener_datos("personal")
-        
-        # Mapeo seguro para evitar el KeyError de tus capturas
-        dict_maqs = {m.get('nombre_maquina', 'S/N'): m.get('id') for m in maqs_db}
-        dict_tecs = {p.get('nombre', 'S/N'): p.get('id') for p in pers_db}
-
-        with st.expander("🆕 Lanzar Nueva Orden"):
-            with st.form("ot_form"):
-                desc = st.text_area("Descripción del trabajo")
-                m_sel = st.selectbox("Máquina", list(dict_maqs.keys()) if dict_maqs else ["Sin máquinas"])
-                t_sel = st.selectbox("Asignar a", list(dict_tecs.keys()) if dict_tecs else ["Sin técnicos"])
-                if st.form_submit_button("Iniciar Orden"):
-                    if desc and dict_maqs and dict_tecs:
-                        # Insertamos los IDs numéricos que pide Supabase
-                        supabase.table("ordenes").insert({
-                            "descripcion": desc,
-                            "id_maquina": dict_maqs[m_sel],
-                            "id_tecnico": dict_tecs[t_sel],
-                            "estado": "Proceso"
-                        }).execute()
-                        st.success("✅ Orden creada correctamente")
-                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error de base de datos: {e}")
 
         # TABLERO KANBAN
         st.divider()
@@ -135,18 +93,12 @@ else:
                 ots = supabase.table("ordenes").select("*").eq("estado", est).execute()
                 for ot in ots.data:
                     with st.container(border=True):
-                        st.write(f"**OT #{ot['id']}**")
                         st.write(ot['descripcion'])
-                        # Movimiento de estados
                         if est == "Proceso":
-                            if st.button("➡️ Revisar", key=f"btn_r_{ot['id']}"):
-                                supabase.table("ordenes").update({"estado": "Revisión"}).eq("id", ot['id']).execute()
-                                st.rerun()
-                        elif est == "Revisión":
-                            if st.button("✅ Finalizar", key=f"btn_f_{ot['id']}"):
-                                supabase.table("ordenes").update({"estado": "Finalizada"}).eq("id", ot['id']).execute()
+                            if st.button("➡️ Revisar", key=f"r_{ot.get('id', ot.get('descripcion'))}"):
+                                supabase.table("ordenes").update({"estado": "Revisión"}).eq("descripcion", ot['descripcion']).execute()
                                 st.rerun()
 
-    if st.sidebar.button("Cerrar Sesión"):
+    if st.sidebar.button("Salir"):
         st.session_state.auth = False
         st.rerun()
