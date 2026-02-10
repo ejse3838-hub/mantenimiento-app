@@ -52,7 +52,7 @@ else:
         st.session_state.auth = False
         st.rerun()
 
-    # --- 1. DASHBOARD ---
+    # --- 1. INICIO ---
     if st.session_state.menu == "🏠 Inicio":
         st.title("📊 Panel de Control")
         df = pd.DataFrame(cargar("ordenes"))
@@ -77,10 +77,8 @@ else:
             dire = c3.text_input("Dirección")
             cl1 = c1.selectbox("Clasificación 1", ["Interno", "Contratista"])
             cl2 = c2.selectbox("Especialidad", ["Mecánico", "Eléctrico", "Instrumentista"])
-            
-            st.write("🖋️ Firma Maestra")
+            st.write("✒️ Firma Maestra")
             st_canvas(stroke_width=2, stroke_color="black", height=100, width=400, key="p_sign")
-            
             if st.form_submit_button("Guardar"):
                 supabase.table("personal").insert({
                     "nombre": f"{nom} {ape}", "apellido": ape, "codigo_empleado": cod_e,
@@ -111,11 +109,10 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 4. ÓRDENES (REVISADO LÍNEA POR LÍNEA) ---
+    # --- 4. ÓRDENES ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de OP")
-        m_data = cargar("maquinas")
-        p_data = cargar("personal")
+        m_data, p_data = cargar("maquinas"), cargar("personal")
         m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in m_data] if m_data else ["Registrar máquinas"]
         p_list = [p['nombre'] for p in p_data] if p_data else ["Registrar personal"]
 
@@ -129,7 +126,6 @@ else:
                 c7, c8, c9 = st.columns(3)
                 paro, her, cos = c7.selectbox("Paro", ["No", "Sí"]), c8.text_input("Herramientas"), c9.number_input("Costo", 0.0)
                 ins = st.text_input("Insumos")
-
                 if st.form_submit_button("Lanzar"):
                     supabase.table("ordenes").insert({
                         "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, "estado": "Proceso",
