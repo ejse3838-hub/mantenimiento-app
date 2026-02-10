@@ -1,7 +1,13 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
-import plotly.express as px  # Para los gráficos de pastel estilo Fractal
+
+# --- PROTECCIÓN PARA LOS GRÁFICOS (AUMENTO DE SEGURIDAD) ---
+try:
+    import plotly.express as px
+    GRAFICOS_LISTOS = True
+except ImportError:
+    GRAFICOS_LISTOS = False
 
 # --- CONEXIÓN ---
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
@@ -17,7 +23,7 @@ def cargar(tabla):
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="CORMAIN CMMS PRO", layout="wide")
 
-# --- SISTEMA DE LOGIN Y REGISTRO (TUS PESTAÑAS ORIGINALES) ---
+# --- SISTEMA DE LOGIN Y REGISTRO ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
@@ -47,35 +53,36 @@ else:
     # --- MENÚ LATERAL ---
     menu = st.sidebar.selectbox("Navegación", ["🏠 Inicio", "👥 Personal", "⚙️ Maquinaria", "📑 Órdenes de Trabajo"])
 
-    # --- 1. INICIO (DASHBOARD + KPI'S AUMENTADOS) ---
+    # --- 1. INICIO (DASHBOARD + KPI'S) ---
     if menu == "🏠 Inicio":
         st.title("📊 Panel de Control CORMAIN")
         o_data = cargar("ordenes")
         
-        # Tus métricas originales
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("En Proceso", len([o for o in o_data if o['estado'] == 'Proceso']))
         col2.metric("Realizadas", len([o for o in o_data if o['estado'] == 'Realizada']))
         col3.metric("Revisadas", len([o for o in o_data if o['estado'] == 'Revisada']))
         col4.metric("Finalizadas", len([o for o in o_data if o['estado'] == 'Finalizada']))
 
-        # AUMENTO: Gráficos de Pastel
         st.divider()
         if o_data:
-            df = pd.DataFrame(o_data)
-            col_graf1, col_graf2 = st.columns(2)
-            with col_graf1:
-                st.subheader("Estado de Órdenes")
-                fig1 = px.pie(df, names='estado', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-                st.plotly_chart(fig1, use_container_width=True)
-            with col_graf2:
-                st.subheader("Carga por Técnico")
-                fig2 = px.pie(df, names='id_tecnico', hole=0.4)
-                st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("Registra tu primera orden para ver las estadísticas.")
+            if GRAFICOS_LISTOS:
+                df = pd.DataFrame(o_data)
+                col_graf1, col_graf2 = st.columns(2)
+                with col_graf1:
+                    st.subheader("Estado de Órdenes")
+                    fig1 = px.pie(df, names='estado', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+                    st.plotly_chart(fig1, use_container_width=True)
+                with col_graf2:
+                    st.subheader("Carga por Técnico")
+                    # Manejo de error si id_tecnico está vacío
+                    names_col = 'id_tecnico' if 'id_tecnico' in df.columns else 'estado'
+                    fig2 = px.pie(df, names=names_col, hole=0.4)
+                    st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.warning("⚠️ Los gráficos están listos, pero falta instalar 'plotly' en el archivo requirements.txt")
 
-    # --- 2. PERSONAL (TU LÓGICA ORIGINAL) ---
+    # --- 2. PERSONAL ---
     elif menu == "👥 Personal":
         st.header("Gestión de Personal")
         with st.form("f_rrhh"):
@@ -87,7 +94,7 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("personal")), use_container_width=True)
 
-    # --- 3. MAQUINARIA (TU LÓGICA ORIGINAL) ---
+    # --- 3. MAQUINARIA ---
     elif menu == "⚙️ Maquinaria":
         st.header("Gestión de Maquinaria")
         with st.form("f_maq"):
@@ -100,11 +107,10 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 4. ÓRDENES DE TRABAJO (FLUJO DINÁMICO + CAMPOS NUEVOS) ---
+    # --- 4. ÓRDENES DE TRABAJO ---
     elif menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de Órdenes de Producción")
         
-        # Formulario de creación con CAMPOS AUMENTADOS
         with st.expander("➕ Crear Nueva Orden"):
             maqs = [m['nombre_maquina'] for m in cargar("maquinas")]
             pers = [p['nombre'] for p in cargar("personal")]
@@ -115,7 +121,6 @@ else:
                 m_s = col_a.selectbox("Seleccionar Máquina", maqs)
                 t_s = col_b.selectbox("Asignar Técnico", pers)
                 
-                # Campos técnicos solicitados
                 tipo_t = col_b.selectbox("Tipo de Tarea", ["Mecánica", "Eléctrica", "Lubricación", "Inspección"])
                 dur = col_a.number_input("Duración Estimada (min)", value=30)
                 frec = col_b.selectbox("Frecuencia", ["Correctiva", "Semanal", "Mensual"])
@@ -124,21 +129,13 @@ else:
                 
                 if st.form_submit_button("Lanzar Orden"):
                     supabase.table("ordenes").insert({
-                        "descripcion": desc, 
-                        "id_maquina": m_s, 
-                        "id_tecnico": t_s, 
-                        "estado": "Proceso",
-                        "tipo_tarea": tipo_t,
-                        "frecuencia": frec,
-                        "duracion_estimada": dur,
-                        "requiere_paro": paro,
-                        "herramientas": herr
+                        "descripcion": desc, "id_maquina": m_s, "id_tecnico": t_s, 
+                        "estado": "Proceso", "tipo_tarea": tipo_t, "frecuencia": frec,
+                        "duracion_estimada": dur, "requiere_paro": paro, "herramientas": herr
                     }).execute()
                     st.rerun()
 
         st.divider()
-        
-        # Tablero de Control de Estados (REVERSIBLE)
         o_data = cargar("ordenes")
         if o_data:
             df = pd.DataFrame(o_data)
@@ -154,8 +151,6 @@ else:
                     for _, row in filas.iterrows():
                         with st.container(border=True):
                             col_txt, col_btn = st.columns([4, 1])
-                            
-                            # Info mostrada en la tarjeta
                             dur_txt = f" | ⏱️ {row.get('duracion_estimada', 0)} min"
                             col_txt.write(f"**ID {row['id']}**: {row['descripcion']} | 🏗️ {row['id_maquina']} | 👤 {row['id_tecnico']} {dur_txt}")
                             
@@ -163,8 +158,6 @@ else:
                                 if col_btn.button(f"➡️ {pasos[estado_actual]}", key=f"next_{row['id']}"):
                                     supabase.table("ordenes").update({"estado": pasos[estado_actual]}).eq("id", row['id']).execute()
                                     st.rerun()
-                                
-                                # AUMENTO: Botón de Rechazo (Solo en Revisada)
                                 if estado_actual == "Revisada":
                                     if col_btn.button(f"❌ Rechazar", key=f"rech_{row['id']}"):
                                         supabase.table("ordenes").update({"estado": "Proceso"}).eq("id", row['id']).execute()
