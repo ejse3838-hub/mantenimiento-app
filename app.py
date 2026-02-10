@@ -4,9 +4,9 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="COMAIN - CMMS Industrial", layout="wide")
+st.set_page_config(page_title="COMAIN - CMMS Industrial", layout="wide", page_icon="🛠️")
 
-# --- 2. CONEXIÓN (Usando tu llave sb_secret) ---
+# --- 2. CONEXIÓN (Usando tu llave sb_secret confirmada) ---
 try:
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
@@ -15,18 +15,18 @@ except Exception as e:
     st.error("Error en Secrets. Revisa la configuración en Streamlit Cloud.")
     st.stop()
 
-# --- 3. LÓGICA DE NAVEGACIÓN ---
+# --- 3. MENÚ LATERAL ---
 st.sidebar.title("🛠️ COMAIN")
 menu = st.sidebar.radio("Navegación", ["Dashboard", "Personal", "Maquinaria", "Órdenes de Trabajo"])
 
 # --- 4. SECCIÓN PERSONAL (9 CAMPOS) ---
 if menu == "Personal":
-    st.header("👥 Gestión de Talento Humano")
+    st.header("👥 Gestión de Personal")
     with st.form("form_p", clear_on_submit=True):
         c1, c2 = st.columns(2)
         nombre = c1.text_input("Nombre Completo")
-        # Si sigue saliendo error de columna, cambia 'cedula' por el nombre exacto en tu DB
-        ced = c2.text_input("Cédula / ID") 
+        # Si da error en 'cedula', cámbialo por el nombre que tengas en Supabase
+        ced = c2.text_input("Cédula / Identificación") 
         cargo = c1.text_input("Cargo")
         tel = c2.text_input("Teléfono")
         email = c1.text_input("Correo Electrónico")
@@ -37,15 +37,22 @@ if menu == "Personal":
         
         if st.form_submit_button("Guardar Empleado"):
             datos_p = {
-                "nombre": nombre, "cedula": ced, "cargo": cargo, 
-                "telefono": tel, "email": email, "turno": turno,
-                "fecha_ingreso": str(f_ing), "salario": salario, "notas": obs
+                "nombre": nombre, 
+                "cedula": ced, # Asegúrate que en Supabase se llame 'cedula'
+                "cargo": cargo, 
+                "telefono": tel, 
+                "email": email, 
+                "turno": turno,
+                "fecha_ingreso": str(f_ing), 
+                "salario": salario, 
+                "notas": obs
             }
             try:
                 supabase.table("personal").insert(datos_p).execute()
                 st.success(f"✅ {nombre} registrado correctamente.")
             except Exception as e:
                 st.error(f"Error: {e}")
+                st.info("💡 Consejo: Revisa si en tu base de datos la columna se llama 'cedula' o 'identificacion'.")
 
 # --- 5. SECCIÓN MAQUINARIA (10 CAMPOS) ---
 elif menu == "Maquinaria":
@@ -60,7 +67,7 @@ elif menu == "Maquinaria":
         f_adq = c3.date_input("Fecha Adquisición")
         prio = c1.selectbox("Prioridad", ["Alta", "Media", "Baja"])
         prov = c2.text_input("Proveedor")
-        v_util = c3.number_input("Vida Útil (Años)")
+        v_util = c3.number_input("Vida Útil (Años)", min_value=1)
         espec = st.text_area("Especificaciones Técnicas")
 
         if st.form_submit_button("Registrar Activo"):
@@ -75,49 +82,54 @@ elif menu == "Maquinaria":
             except Exception as e:
                 st.error(f"Error al guardar: {e}")
 
-# --- 6. ÓRDENES DE TRABAJO (CAMPOS REDUCIDOS PARA EVITAR ERRORES) ---
+# --- 6. ÓRDENES DE TRABAJO (CAMPOS REDUCIDOS) ---
 elif menu == "Órdenes de Trabajo":
-    st.header("📝 Órdenes de Trabajo (OP)")
-    with st.expander("Nueva Orden"):
-        with st.form("form_op"):
-            m_id = st.text_input("Código de Máquina")
-            tipo = st.selectbox("Tipo", ["Preventivo", "Correctivo"])
+    st.header("📝 Órdenes de Trabajo (OT)")
+    with st.expander("➕ Generar Nueva Orden"):
+        with st.form("form_ot"):
+            m_id = st.text_input("Código o ID de Máquina")
+            tipo = st.selectbox("Tipo de Mantenimiento", ["Preventivo", "Correctivo", "Predictivo"])
             tec = st.text_input("Técnico Responsable")
             desc = st.text_area("Descripción de la Tarea")
             
-            if st.form_submit_button("Generar OP"):
-                datos_op = {
-                    "id_maquina": m_id, "tipo": tipo, 
-                    "tecnico": tec, "descripcion": desc,
-                    "fecha": str(datetime.now().date()), "estado": "Abierta"
+            if st.form_submit_button("Generar Orden"):
+                datos_ot = {
+                    "id_maquina": m_id, 
+                    "tipo": tipo, 
+                    "tecnico": tec, 
+                    "descripcion": desc,
+                    "fecha": str(datetime.now().date()), 
+                    "estado": "Abierta"
                 }
                 try:
-                    supabase.table("ordenes_trabajo").insert(datos_op).execute()
-                    st.success("✅ Orden generada.")
+                    supabase.table("ordenes_trabajo").insert(datos_ot).execute()
+                    st.success("✅ Orden generada con éxito.")
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-    # Ver historial
-    st.subheader("Historial de Mantenimiento")
+    st.divider()
+    st.subheader("📋 Historial de Órdenes")
     try:
         res = supabase.table("ordenes_trabajo").select("*").execute()
         if res.data:
-            st.dataframe(pd.DataFrame(res.data))
+            df = pd.DataFrame(res.data)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No hay órdenes registradas.")
     except:
-        st.info("No hay datos para mostrar.")
+        st.warning("No se pudo cargar la tabla de órdenes.")
 
 # --- 7. DASHBOARD ---
 elif menu == "Dashboard":
-    st.header("📊 Resumen Gerencial")
+    st.header("📊 Resumen del Sistema")
     col1, col2, col3 = st.columns(3)
     try:
-        # Conteos rápidos para indicadores
         m_qty = len(supabase.table("maquinaria").select("id").execute().data)
         p_qty = len(supabase.table("personal").select("id").execute().data)
-        op_qty = len(supabase.table("ordenes_trabajo").select("id").execute().data)
+        ot_qty = len(supabase.table("ordenes_trabajo").select("id").execute().data)
         
-        col1.metric("Activos", m_qty)
-        col2.metric("Personal", p_qty)
-        col3.metric("OPs Totales", op_qty)
+        col1.metric("Activos Totales", m_qty)
+        col2.metric("Personal Activo", p_qty)
+        col3.metric("Órdenes Generadas", ot_qty)
     except:
-        st.warning("Cargando indicadores...")
+        st.info("Cargando indicadores... (Asegúrate de tener datos en las tablas)")
