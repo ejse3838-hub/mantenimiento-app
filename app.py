@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
-import plotly.express as px # AUMENTO: Librería para los pasteles
+import plotly.express as px  # AUMENTO: Para los gráficos de pastel
 
 # --- CONEXIÓN ---
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
@@ -57,20 +57,20 @@ else:
         col3.metric("Revisadas", len([o for o in o_data if o['estado'] == 'Revisada']))
         col4.metric("Finalizadas", len([o for o in o_data if o['estado'] == 'Finalizada']))
 
-        # --- AUMENTO: GRÁFICOS DE PASTEL (KPIs) ---
+        # --- AUMENTO: GRÁFICOS DE PASTEL ---
         st.divider()
         if o_data:
             df = pd.DataFrame(o_data)
-            c1, c2 = st.columns(2)
-            with c1:
+            col_g1, col_g2 = st.columns(2)
+            with col_g1:
                 st.subheader("Estado de Órdenes")
                 fig1 = px.pie(df, names='estado', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                 st.plotly_chart(fig1, use_container_width=True)
-            with c2:
-                st.subheader("Carga de Trabajo")
+            with col_g2:
+                st.subheader("Carga por Técnico")
                 fig2 = px.pie(df, names='id_tecnico', hole=0.4)
                 st.plotly_chart(fig2, use_container_width=True)
-        # ------------------------------------------
+        # ---------------------------------
 
     # --- 2. PERSONAL ---
     elif menu == "👥 Personal":
@@ -101,23 +101,23 @@ else:
     elif menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de Órdenes de Producción")
         
-        # Formulario de creación
+        # Formulario de creación (AUMENTADO)
         with st.expander("➕ Crear Nueva Orden"):
             maqs = [m['nombre_maquina'] for m in cargar("maquinas")]
             pers = [p['nombre'] for p in cargar("personal")]
             
-            # --- AUMENTO: CAMPOS TÉCNICOS ---
-            with st.form("f_crear_ot"):
-                desc = st.text_area("Descripción")
-                m_s = st.selectbox("Máquina", maqs)
-                t_s = st.selectbox("Técnico", pers)
+            with st.form("f_crear_op"):
+                col_a, col_b = st.columns(2)
+                desc = col_a.text_area("Descripción")
+                m_s = col_a.selectbox("Máquina", maqs)
+                t_s = col_b.selectbox("Técnico", pers)
                 
-                c_a, c_b = st.columns(2)
-                tipo_t = c_a.selectbox("Tipo de Tarea", ["Mecánica", "Eléctrica", "Lubricación", "Inspección"])
-                dur = c_b.number_input("Duración Estimada (min)", value=30)
-                frec = c_a.selectbox("Frecuencia", ["Correctiva", "Semanal", "Mensual"])
-                paro = c_b.checkbox("¿Requiere paro de máquina?")
-                herr = st.text_input("Herramientas/Insumos")
+                # --- NUEVOS CAMPOS ---
+                tipo_t = col_b.selectbox("Tipo de Tarea", ["Mecánica", "Eléctrica", "Lubricación", "Inspección"])
+                dur = col_a.number_input("Duración Estimada (min)", value=30)
+                frec = col_b.selectbox("Frecuencia", ["Correctiva", "Semanal", "Mensual"])
+                paro = col_a.checkbox("¿Requiere paro de máquina?")
+                herr = col_b.text_input("Herramientas/Insumos")
                 
                 if st.form_submit_button("Lanzar Orden"):
                     supabase.table("ordenes").insert({
@@ -132,21 +132,14 @@ else:
                         "herramientas": herr
                     }).execute()
                     st.rerun()
-            # -------------------------------
 
         st.divider()
         
-        # Tablero de Control de Estados
+        # Tablero de Control de Estados (CON BOTÓN DE RECHAZO)
         o_data = cargar("ordenes")
         if o_data:
             df = pd.DataFrame(o_data)
-            
-            # Definimos los pasos del flujo
-            pasos = {
-                "Proceso": "Realizada",
-                "Realizada": "Revisada",
-                "Revisada": "Finalizada"
-            }
+            pasos = {"Proceso": "Realizada", "Realizada": "Revisada", "Revisada": "Finalizada"}
             
             for estado_actual in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
                 st.subheader(f"📍 Estado: {estado_actual}")
@@ -158,7 +151,24 @@ else:
                     for _, row in filas.iterrows():
                         with st.container(border=True):
                             col_t, col_b = st.columns([4, 1])
-                            # AUMENTO: Mostramos datos técnicos en la tarjeta
-                            txt_info = f"**ID {row['id']}**: {row['descripcion']} | 🏗️ {row['id_maquina']} | 👤 {row['id_tecnico']}"
-                            if 'duracion_estimada' in row:
-                                txt_info
+                            
+                            # Mostrar info técnica si existe
+                            info_ext = f" | ⏱️ {row.get('duracion_estimada', 0)} min"
+                            col_t.write(f"**ID {row['id']}**: {row['descripcion']} | 🏗️ {row['id_maquina']} | 👤 {row['id_tecnico']} {info_ext}")
+                            
+                            if estado_actual in pasos:
+                                if col_b.button(f"➡️ {pasos[estado_actual]}", key=f"next_{row['id']}"):
+                                    supabase.table("ordenes").update({"estado": pasos[estado_actual]}).eq("id", row['id']).execute()
+                                    st.rerun()
+                                
+                                # AUMENTO: Botón de Rechazo (Solo en Revisada)
+                                if estado_actual == "Revisada":
+                                    if col_b.button(f"❌ Rechazar", key=f"rech_{row['id']}"):
+                                        supabase.table("ordenes").update({"estado": "Proceso"}).eq("id", row['id']).execute()
+                                        st.rerun()
+                            else:
+                                col_b.write("✅ Completada")
+
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.auth = False
+        st.rerun()
