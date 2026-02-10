@@ -18,7 +18,6 @@ supabase: Client = create_client(url, key)
 # --- FUNCIÓN DE CARGA DINÁMICA ---
 def cargar(tabla):
     try:
-        # Filtra dinámicamente por el usuario que inició sesión
         res = supabase.table(tabla).select("*").eq("creado_por", st.session_state.user).execute()
         return res.data if res.data else []
     except: return []
@@ -51,7 +50,7 @@ if not st.session_state.auth:
             except: st.error("Error al crear cuenta.")
 
 else:
-    # --- MENÚ LATERAL (BOTONES FIJOS) ---
+    # --- MENÚ LATERAL (BOTONES) ---
     st.sidebar.title(f"👤 {st.session_state.user}")
     if "menu" not in st.session_state: st.session_state.menu = "🏠 Inicio"
 
@@ -79,11 +78,11 @@ else:
             if GRAFICOS_LISTOS:
                 st.divider()
                 colg1, colg2 = st.columns(2)
-                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado de Órdenes")
+                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado Global")
                 colg1.plotly_chart(fig1, use_container_width=True)
                 fig2 = px.pie(df, names='id_tecnico', hole=0.4, title="Carga por Técnico")
                 colg2.plotly_chart(fig2, use_container_width=True)
-        else: st.info("No hay datos registrados aún.")
+        else: st.info("No hay datos para mostrar.")
 
     elif st.session_state.menu == "👥 Personal":
         st.header("Gestión de Personal")
@@ -99,7 +98,8 @@ else:
                     "especialidad": esp, "creado_por": st.session_state.user
                 }).execute()
                 st.rerun()
-        st.table(pd.DataFrame(cargar("personal")))
+        pers_actual = cargar("personal")
+        if pers_actual: st.table(pd.DataFrame(pers_actual))
 
     elif st.session_state.menu == "⚙️ Maquinaria":
         st.header("Gestión de Maquinas")
@@ -111,24 +111,35 @@ else:
                     "nombre_maquina": n_m, "estado": est, "creado_por": st.session_state.user
                 }).execute()
                 st.rerun()
-        st.table(pd.DataFrame(cargar("maquinas")))
+        maqs_actual = cargar("maquinas")
+        if maqs_actual: st.table(pd.DataFrame(maqs_actual))
 
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Órdenes de Producción")
         with st.expander("➕ Crear Nueva"):
-            maqs = [m['nombre_maquina'] for m in cargar("maquinas")]
+            # CARGA SEGURA DE LISTAS
+            maqs_list = cargar("maquinas")
             pers_list = cargar("personal")
+            
+            # Formateamos listas para el selectbox solo si hay datos
+            nombres_maqs = [m['nombre_maquina'] for m in maqs_list] if maqs_list else ["Sin máquinas"]
+            nombres_pers = [p['nombre'] for p in pers_list] if pers_list else ["Sin personal"]
+            
             with st.form("f_o"):
                 desc = st.text_area("Descripción")
-                maq = st.selectbox("Máquina", maqs)
-                # LÍNEA 101 CORREGIDA:
-                t_s = st.selectbox("Técnico", [p['nombre'] for p in pers_list])
+                maq = st.selectbox("Máquina", nombres_maqs)
+                # LÍNEA 101 CORREGIDA CON VALIDACIÓN
+                tec = st.selectbox("Técnico", nombres_pers)
+                
                 if st.form_submit_button("Lanzar"):
-                    supabase.table("ordenes").insert({
-                        "descripcion": desc, "id_maquina": maq, "id_tecnico": t_s,
-                        "estado": "Proceso", "creado_por": st.session_state.user
-                    }).execute()
-                    st.rerun()
+                    if nombres_maqs[0] == "Sin máquinas" or nombres_pers[0] == "Sin personal":
+                        st.error("Debes registrar personal y máquinas primero.")
+                    else:
+                        supabase.table("ordenes").insert({
+                            "descripcion": desc, "id_maquina": maq, "id_tecnico": tec,
+                            "estado": "Proceso", "creado_por": st.session_state.user
+                        }).execute()
+                        st.rerun()
         
         st.divider()
         df_o = pd.DataFrame(cargar("ordenes"))
@@ -152,5 +163,5 @@ else:
                         if est == "Proceso":
                             tel_t = next((p['telefono'] for p in pers_list if p['nombre'] == row['id_tecnico']), None)
                             if tel_t:
-                                msg = urllib.parse.quote(f"Nueva Orden CORMAIN: {row['descripcion']} en {row['id_maquina']}")
+                                msg = urllib.parse.quote(f"Nueva Orden: {row['descripcion']} en {row['id_maquina']}")
                                 c2.link_button("📲 Notificar", f"https://wa.me/{tel_t}?text={msg}")
