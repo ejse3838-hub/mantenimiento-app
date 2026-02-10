@@ -52,21 +52,17 @@ else:
         st.session_state.auth = False
         st.rerun()
 
-    # --- 1. INICIO ---
+    # --- PÁGINAS ---
     if st.session_state.menu == "🏠 Inicio":
         st.title("📊 Panel de Control")
         df = pd.DataFrame(cargar("ordenes"))
         if not df.empty:
-            c1, c2 = st.columns(2)
-            c1.metric("Órdenes Totales", len(df))
-            if 'costo' in df.columns:
-                c2.metric("Inversión Total", f"${df['costo'].sum():,.2f}")
+            st.metric("Órdenes Totales", len(df))
             import plotly.express as px
             fig = px.pie(df, names='estado', hole=0.4, title="Estado de Órdenes")
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("Sin datos registrados.")
 
-    # --- 2. PERSONAL ---
     elif st.session_state.menu == "👥 Personal":
         st.header("Gestión de Personal")
         with st.form("f_p"):
@@ -81,7 +77,6 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("personal")), use_container_width=True)
 
-    # --- 3. MAQUINARIA ---
     elif st.session_state.menu == "⚙️ Maquinaria":
         st.header("Ficha Técnica")
         with st.form("f_m"):
@@ -89,7 +84,6 @@ else:
             nm, cod = c1.text_input("Máquina"), c2.text_input("Código")
             ubi, est = c1.text_input("Ubicación"), c2.selectbox("Estado", ["Operativa", "Mantenimiento"])
             if st.form_submit_button("Registrar"):
-                # Sincronizado con tus columnas reales
                 supabase.table("maquinas").insert({
                     "nombre_maquina": nm, "codigo": cod, "ubicacion": ubi, 
                     "estado": est, "creado_por": st.session_state.user
@@ -97,7 +91,6 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 4. ÓRDENES (VERSION SIMPLIFICADA PARA EVITAR ERRORES) ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de OP")
         m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in cargar("maquinas")]
@@ -108,19 +101,20 @@ else:
                 desc = st.text_area("Descripción")
                 c1, c2, c3 = st.columns(3)
                 mq, tc, pr = c1.selectbox("Máquina", m_list), c2.selectbox("Técnico", p_list), c3.selectbox("Prioridad", ["ALTA", "BAJA"])
-                
-                # Campos adicionales que causaban errores si no estaban en Supabase
                 tt = st.selectbox("Tipo", ["Correctiva", "Preventiva"])
                 cos = st.number_input("Costo ($)", 0.0)
-
                 if st.form_submit_button("Lanzar"):
-                    # Si alguna de estas columnas no existe en Supabase, bórrala de aquí
-                    supabase.table("ordenes").insert({
-                        "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, 
-                        "prioridad": pr, "costo": cos, "tipo_tarea": tt,
-                        "estado": "Proceso", "creado_por": st.session_state.user
-                    }).execute()
-                    st.rerun()
+                    # Si esto falla, borra los campos que no tengas en Supabase
+                    try:
+                        supabase.table("ordenes").insert({
+                            "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, 
+                            "prioridad": pr, "costo": cos, "tipo_tarea": tt,
+                            "estado": "Proceso", "creado_por": st.session_state.user
+                        }).execute()
+                        st.success("✅ ¡Orden enviada con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al conectar: {e}")
 
         st.divider()
         df_o = pd.DataFrame(cargar("ordenes"))
@@ -129,7 +123,6 @@ else:
                 with st.container(border=True):
                     st.write(f"**{row['id_maquina']}** | {row['prioridad']}")
                     st.write(row['descripcion'])
-                    # Firma simplificada para evitar errores de Script Execution
                     st.write("✒️ Firma Jefe")
                     st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
                     if st.button("🗑️ Eliminar", key=f"del_{row['id']}"):
