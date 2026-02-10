@@ -18,7 +18,7 @@ supabase: Client = create_client(url, key)
 # --- FUNCIÓN DE CARGA DINÁMICA ---
 def cargar(tabla):
     try:
-        # Aquí está el secreto: Filtra por quien sea que esté logueado en ese momento
+        # Filtra dinámicamente por el usuario que inició sesión
         res = supabase.table(tabla).select("*").eq("creado_por", st.session_state.user).execute()
         return res.data if res.data else []
     except: return []
@@ -38,7 +38,7 @@ if not st.session_state.auth:
             res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
             if res.data: 
                 st.session_state.auth = True
-                st.session_state.user = res.data[0]['email'] # Guardamos el correo del que entró
+                st.session_state.user = res.data[0]['email']
                 st.rerun()
             else: st.error("Datos incorrectos")
     with tab2:
@@ -46,12 +46,12 @@ if not st.session_state.auth:
         new_p = st.text_input("Nueva Clave", type="password")
         if st.button("Crear Cuenta"):
             try:
-                supabase.table("usuarios").insert({"email": new_u, "password": new_p}).execute()
+                supabase.table("usuarios").insert({"email": new_u, "password": new_p, "creado_por": new_u}).execute()
                 st.success("¡Cuenta creada!")
             except: st.error("Error al crear cuenta.")
 
 else:
-    # --- MENÚ LATERAL (BOTONES) ---
+    # --- MENÚ LATERAL (BOTONES FIJOS) ---
     st.sidebar.title(f"👤 {st.session_state.user}")
     if "menu" not in st.session_state: st.session_state.menu = "🏠 Inicio"
 
@@ -79,12 +79,11 @@ else:
             if GRAFICOS_LISTOS:
                 st.divider()
                 colg1, colg2 = st.columns(2)
-                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado Global")
+                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado de Órdenes")
                 colg1.plotly_chart(fig1, use_container_width=True)
                 fig2 = px.pie(df, names='id_tecnico', hole=0.4, title="Carga por Técnico")
                 colg2.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("No hay órdenes registradas para este usuario.")
+        else: st.info("No hay datos registrados aún.")
 
     elif st.session_state.menu == "👥 Personal":
         st.header("Gestión de Personal")
@@ -118,14 +117,15 @@ else:
         st.header("Órdenes de Producción")
         with st.expander("➕ Crear Nueva"):
             maqs = [m['nombre_maquina'] for m in cargar("maquinas")]
-            pers_data = cargar("personal")
+            pers_list = cargar("personal")
             with st.form("f_o"):
                 desc = st.text_area("Descripción")
                 maq = st.selectbox("Máquina", maqs)
-                tec = st.selectbox("Técnico", [p['nombre'] for p in pers_data])
+                # LÍNEA 101 CORREGIDA:
+                t_s = st.selectbox("Técnico", [p['nombre'] for p in pers_list])
                 if st.form_submit_button("Lanzar"):
                     supabase.table("ordenes").insert({
-                        "descripcion": desc, "id_maquina": maq, "id_tecnico": tec,
+                        "descripcion": desc, "id_maquina": maq, "id_tecnico": t_s,
                         "estado": "Proceso", "creado_por": st.session_state.user
                     }).execute()
                     st.rerun()
@@ -150,7 +150,7 @@ else:
                                 supabase.table("ordenes").delete().eq("id", row['id']).execute()
                                 st.rerun()
                         if est == "Proceso":
-                            tel_t = next((p['telefono'] for p in pers_data if p['nombre'] == row['id_tecnico']), None)
+                            tel_t = next((p['telefono'] for p in pers_list if p['nombre'] == row['id_tecnico']), None)
                             if tel_t:
-                                msg = urllib.parse.quote(f"Nueva Orden: {row['descripcion']} en {row['id_maquina']}")
+                                msg = urllib.parse.quote(f"Nueva Orden CORMAIN: {row['descripcion']} en {row['id_maquina']}")
                                 c2.link_button("📲 Notificar", f"https://wa.me/{tel_t}?text={msg}")
