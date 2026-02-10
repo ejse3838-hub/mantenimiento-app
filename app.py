@@ -24,9 +24,9 @@ def cargar(tabla):
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="CORMAIN CMMS PRO", layout="wide")
 
-# --- LOGIN ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 
+# --- LOGIN ---
 if not st.session_state.auth:
     tab1, tab2 = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
     with tab1:
@@ -49,7 +49,7 @@ if not st.session_state.auth:
             except: st.error("Error al crear cuenta.")
 
 else:
-    # --- MENÚ LATERAL ---
+    # --- MENÚ LATERAL (BOTONES) ---
     st.sidebar.title(f"👤 {st.session_state.user}")
     if "menu" not in st.session_state: st.session_state.menu = "🏠 Inicio"
 
@@ -63,7 +63,7 @@ else:
         st.session_state.auth = False
         st.rerun()
 
-    # --- 1. INICIO ---
+    # --- 1. INICIO (DASHBOARD) ---
     if st.session_state.menu == "🏠 Inicio":
         st.title("📊 Panel de Control")
         o_data = cargar("ordenes")
@@ -85,7 +85,7 @@ else:
         else:
             st.info("No hay datos para mostrar.")
 
-    # --- 2. PERSONAL ---
+    # --- 2. PERSONAL (NOMBRES, APELLIDOS, PUESTO) ---
     elif st.session_state.menu == "👥 Personal":
         st.header("Gestión de Personal")
         with st.form("f_pers"):
@@ -102,42 +102,48 @@ else:
                     "creado_por": st.session_state.user
                 }).execute()
                 st.rerun()
-        st.table(pd.DataFrame(cargar("personal"))[["nombre", "cargo", "especialidad"]])
+        
+        per_list = cargar("personal")
+        if per_list:
+            st.table(pd.DataFrame(per_list)[["nombre", "cargo", "especialidad"]])
 
-    # --- 3. MAQUINARIA ---
+    # --- 3. MAQUINARIA (NOMBRE + CÓDIGO) ---
     elif st.session_state.menu == "⚙️ Maquinaria":
         st.header("Gestión de Maquinas")
         with st.form("f_maq"):
             c1, c2 = st.columns(2)
-            n_m = c1.text_input("Máquina")
-            cod = c2.text_input("Código de Máquina")
+            n_m = c1.text_input("Nombre Máquina")
+            cod_m = c2.text_input("Código de Máquina")
             est = st.selectbox("Estado", ["Operativa", "Falla"])
             if st.form_submit_button("Registrar"):
                 supabase.table("maquinas").insert({
                     "nombre_maquina": n_m, 
-                    "codigo": cod,
+                    "codigo": cod_m,
                     "estado": est, 
                     "creado_por": st.session_state.user
                 }).execute()
                 st.rerun()
-        st.table(pd.DataFrame(cargar("maquinas"))[["nombre_maquina", "codigo", "estado"]])
+        
+        maq_list = cargar("maquinas")
+        if maq_list:
+            st.table(pd.DataFrame(maq_list)[["nombre_maquina", "codigo", "estado"]])
 
-    # --- 4. ÓRDENES DE TRABAJO ---
+    # --- 4. ÓRDENES DE TRABAJO (PERIODICIDAD) ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Órdenes de Producción")
         
         with st.expander("➕ Crear Nueva"):
             maqs_data = cargar("maquinas")
-            # Mostramos Nombre + Código en el selector
-            maqs_opciones = [f"{m['nombre_maquina']} ({m['codigo']})" for m in maqs_data]
+            # Combinamos Nombre y Código para el selector
+            maqs_opts = [f"{m['nombre_maquina']} ({m['codigo']})" for m in maqs_data]
             pers_data = cargar("personal")
-            tec_opciones = [p['nombre'] for p in pers_data]
+            pers_opts = [p['nombre'] for p in pers_data]
             
             with st.form("f_orden"):
                 desc = st.text_area("Descripción")
                 c1, c2 = st.columns(2)
-                maq = c1.selectbox("Máquina", maqs_opciones)
-                tec = c2.selectbox("Técnico", tec_opciones)
+                maq = c1.selectbox("Máquina", maqs_opts)
+                tec = c2.selectbox("Técnico", pers_opts)
                 frec = st.selectbox("Periodicidad", ["Correctiva", "Diaria", "Semanal", "Mensual", "Anual"])
                 
                 if st.form_submit_button("Lanzar"):
