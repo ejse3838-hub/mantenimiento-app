@@ -153,6 +153,7 @@ else:
                         "duracion_estimada": dur, "requiere_paro": paro,
                         "herramientas": herr, "prioridad": prio, "insumos": insu,
                         "costo": cost, "creado_por": st.session_state.user
+                    }).execute()
                     st.rerun()
 
         st.divider()
