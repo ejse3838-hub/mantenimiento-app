@@ -51,7 +51,7 @@ if not st.session_state.auth:
             except: st.error("Error al crear cuenta.")
 
 else:
-    # --- MENÚ LATERAL (BOTONES) ---
+    # --- MENÚ LATERAL ---
     st.sidebar.title(f"👤 {st.session_state.user}")
     if "menu" not in st.session_state: st.session_state.menu = "🏠 Inicio"
 
@@ -83,48 +83,49 @@ else:
             if GRAFICOS_LISTOS:
                 st.divider()
                 colg1, colg2 = st.columns(2)
-                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado Global de Órdenes")
+                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado Global")
                 colg1.plotly_chart(fig1, use_container_width=True)
-                fig2 = px.pie(df, names='prioridad', title="Prioridad de Tareas")
+                fig2 = px.pie(df, names='prioridad', title="Distribución de Prioridades")
                 colg2.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("No hay datos para mostrar.")
 
-    # --- 2. PERSONAL (NOMBRES, APELLIDOS, CÓDIGO, EMAIL, FIRMA) ---
+    # --- 2. PERSONAL (ESPECIALIDAD Y FIRMA_PATH) ---
     elif st.session_state.menu == "👥 Personal":
-        st.header("Gestión de Personal Corporativo")
-        with st.form("f_pers_pro"):
-            col1, col2, col3 = st.columns(3)
-            nom = col1.text_input("Nombres")
-            ape = col2.text_input("Apellidos")
-            cod_emp = col3.text_input("Código de Empleado")
+        st.header("Gestión de Personal")
+        with st.form("f_pers_industrial"):
+            c1, c2, c3 = st.columns(3)
+            nom = c1.text_input("Nombres")
+            ape = c2.text_input("Apellidos")
+            cod_e = c3.text_input("Código de Empleado")
             
-            mail = col1.text_input("Email Corporativo")
-            car = col2.text_input("Cargo")
-            dir_e = col3.text_input("Dirección de Domicilio")
+            mail = c1.text_input("Email Corporativo")
+            car = c2.text_input("Cargo")
+            direc = c3.text_input("Dirección")
             
-            cl1 = col1.selectbox("Clasificación 1", ["Interno", "Externo", "Contratista"])
-            cl2 = col2.selectbox("Clasificación 2", ["Planta", "Campo", "Administrativo"])
+            cl1 = c1.selectbox("Clasificación 1", ["Interno", "Externo", "Contratista"])
+            cl2 = c2.selectbox("Clasificación 2 (Especialidad)", ["Mecánico", "Eléctrico", "Operador", "Instrumentista", "Civil"])
             
             st.write("✒️ **Firma Digital Maestra**")
-            canvas_p = st_canvas(stroke_width=2, stroke_color="black", background_color="#eee", height=100, width=400, key="sign_personal")
+            st_canvas(stroke_width=2, stroke_color="black", background_color="#ffffff", height=100, width=400, key="p_sign")
             
-            if st.form_submit_button("Guardar Registro"):
+            if st.form_submit_button("Guardar Personal"):
                 supabase.table("personal").insert({
-                    "nombre": f"{nom} {ape}", "apellido": ape, "codigo_empleado": cod_emp,
-                    "email": mail, "cargo": car, "especialidad": cl2, "clasificacion1": cl1,
-                    "direccion": dir_e, "firma_maestra": "S", "creado_por": st.session_state.user
+                    "nombre": f"{nom} {ape}", "apellido": ape, "codigo_empleado": cod_e,
+                    "email": mail, "cargo": car, "especialidad": cl2, 
+                    "clasificacion1": cl1, "direccion": direc, "firma_path": "REGISTRADA",
+                    "creado_por": st.session_state.user
                 }).execute()
                 st.rerun()
         
-        per_list = cargar("personal")
-        if per_list:
-            st.dataframe(pd.DataFrame(per_list).drop(columns=['id', 'creado_por'], errors='ignore'), use_container_width=True)
+        plist = cargar("personal")
+        if plist:
+            st.dataframe(pd.DataFrame(plist).drop(columns=['id', 'creado_por'], errors='ignore'), use_container_width=True)
 
-    # --- 3. MAQUINARIA (FICHA TÉCNICA EXTENDIDA) ---
+    # --- 3. MAQUINARIA (FICHA TÉCNICA) ---
     elif st.session_state.menu == "⚙️ Maquinaria":
         st.header("Gestión de Activos (Ficha Técnica)")
-        with st.form("f_maq_completo"):
+        with st.form("f_maq_full"):
             c1, c2, c3 = st.columns(3)
             n_m = c1.text_input("Nombre Máquina")
             cod_m = c2.text_input("Código de Máquina")
@@ -132,7 +133,7 @@ else:
             
             mod_m = c1.text_input("Modelo")
             ser_m = c2.text_input("Número Serial")
-            est_m = c3.selectbox("Estado Operativo", ["Operativa", "Falla", "Mantenimiento"])
+            est_m = c3.selectbox("Estado", ["Operativa", "Falla", "Mantenimiento"])
             
             f_compra = c1.date_input("Fecha de Compra")
             hrs_uso = c2.number_input("Horas de Uso", min_value=0)
@@ -150,13 +151,13 @@ else:
                 }).execute()
                 st.rerun()
         
-        maq_list = cargar("maquinas")
-        if maq_list:
-            st.dataframe(pd.DataFrame(maq_list).drop(columns=['id', 'creado_por'], errors='ignore'), use_container_width=True)
+        mlist = cargar("maquinas")
+        if mlist:
+            st.dataframe(pd.DataFrame(mlist).drop(columns=['id', 'creado_por'], errors='ignore'), use_container_width=True)
 
-    # --- 4. ÓRDENES DE TRABAJO (PRIORIDAD, COSTOS, INSUMOS Y FIRMA DE CIERRE) ---
+    # --- 4. ÓRDENES (NUEVOS CAMPOS: TIPO_TAREA, DURACION, PARO, HERRAMIENTAS) ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
-        st.header("Gestión de Órdenes de Producción")
+        st.header("Gestión de Mantenimiento")
         
         with st.expander("➕ Crear Nueva Orden"):
             maqs_data = cargar("maquinas")
@@ -164,23 +165,33 @@ else:
             pers_data = cargar("personal")
             pers_opts = [p['nombre'] for p in pers_data]
             
-            with st.form("f_orden_pro"):
+            with st.form("f_orden_completa"):
                 desc = st.text_area("Descripción de la Falla/Tarea")
+                
                 c1, c2, c3 = st.columns(3)
                 maq = c1.selectbox("Máquina", maqs_opts)
-                tec = c2.selectbox("Técnico", pers_opts)
+                tec = c2.selectbox("Técnico Asignado", pers_opts)
                 prio = c3.selectbox("Prioridad", ["🔴 ALTA", "🟡 MEDIA", "🟢 BAJA"])
                 
                 c4, c5, c6 = st.columns(3)
-                frec = c4.selectbox("Periodicidad", ["Correctiva", "Diaria", "Semanal", "Mensual", "Anual"])
-                costo = c5.number_input("Costo Estimado ($)", min_value=0.0)
-                insumos = c6.text_input("Insumos/Repuestos utilizados")
+                tipo_t = c4.selectbox("Tipo de Tarea", ["Lubricación", "Ajuste", "Inspección", "Cambio de Componente", "Reparación"])
+                duracion = c5.text_input("Duración Estimada (ej: 2h 30m)", value="1h")
+                paro = c6.selectbox("¿Requiere Paro de Planta?", ["No", "Sí"])
+                
+                c7, c8, c9 = st.columns(3)
+                frec = c7.selectbox("Periodicidad", ["Correctiva", "Diaria", "Semanal", "Mensual", "Anual"])
+                costo = c8.number_input("Costo Estimado ($)", min_value=0.0)
+                herr = c9.text_input("Herramientas Necesarias")
+                
+                insumos = st.text_input("Insumos/Repuestos utilizados")
                 
                 if st.form_submit_button("Lanzar Orden"):
                     supabase.table("ordenes").insert({
                         "descripcion": desc, "id_maquina": maq, "id_tecnico": tec,
                         "frecuencia": frec, "prioridad": prio, "costo": costo,
                         "insumos": insumos, "estado": "Proceso", 
+                        "tipo_tarea": tipo_t, "duracion_estimada": duracion,
+                        "requiere_paro": paro, "herramientas": herr,
                         "creado_por": st.session_state.user
                     }).execute()
                     st.rerun()
@@ -194,26 +205,32 @@ else:
                 items = df_o[df_o['estado'] == est]
                 for _, row in items.iterrows():
                     with st.container(border=True):
-                        c1, c2, c3 = st.columns([3, 1, 1])
-                        c1.write(f"### {row['prioridad']} | {row['id_maquina']}")
-                        c1.write(f"**Tarea:** {row['descripcion']}")
-                        c1.caption(f"👤 Técnico: {row['id_tecnico']} | ⏱️ {row.get('frecuencia', 'N/A')} | 💰 ${row.get('costo', 0)}")
-                        if row.get('insumos'):
-                            c1.info(f"📦 Repuestos: {row['insumos']}")
+                        col_a, col_b, col_c = st.columns([3, 1, 1])
+                        col_a.write(f"### {row['prioridad']} | {row['id_maquina']}")
+                        col_a.write(f"**Tarea:** {row['descripcion']}")
                         
-                        # SISTEMA DE FIRMA PARA EL JEFE (Solo en estado Revisada)
+                        # Detalles técnicos adicionales
+                        detalles = f"⏱️ **Duración:** {row.get('duracion_estimada','-')} | 🛑 **Paro:** {row.get('requiere_paro','-')} | 🛠️ **Tipo:** {row.get('tipo_tarea','-')}"
+                        col_a.write(detalles)
+                        
+                        col_a.caption(f"👤 Técnico: {row['id_tecnico']} | ⏱️ {row.get('frecuencia', 'N/A')} | 💰 ${row.get('costo', 0)}")
+                        
+                        if row.get('herramientas'):
+                            col_a.info(f"🔧 **Herramientas:** {row['herramientas']}")
+                        if row.get('insumos'):
+                            col_a.warning(f"📦 **Repuestos:** {row['insumos']}")
+                        
                         if est == "Revisada":
-                            st.write("✒️ **Firma de Aprobación del Jefe de Área**")
-                            cv_jefe = st_canvas(stroke_width=2, stroke_color="black", background_color="#f9f9f9", height=80, width=300, key=f"f_{row['id']}")
-                            if c2.button("✅ Firmar y Finalizar", key=f"firme_{row['id']}"):
+                            st.write("✒️ **Firma de Aprobación del Jefe**")
+                            st_canvas(stroke_width=2, stroke_color="black", background_color="#eee", height=80, width=250, key=f"f_{row['id']}")
+                            if col_b.button("✅ Firmar y Cerrar", key=f"btn_f_{row['id']}"):
                                 supabase.table("ordenes").update({"estado": "Finalizada", "firma_jefe": "APROBADO"}).eq("id", row['id']).execute()
                                 st.rerun()
                         elif est in pasos:
-                            if c2.button(f"➡️ {pasos[est]}", key=f"av_{row['id']}"):
+                            if col_b.button(f"➡️ {pasos[est]}", key=f"av_{row['id']}"):
                                 supabase.table("ordenes").update({"estado": pasos[est]}).eq("id", row['id']).execute()
                                 st.rerun()
                         
-                        if est in ["Proceso", "Finalizada"]:
-                            if c3.button("🗑️ Eliminar", key=f"del_{row['id']}"):
-                                supabase.table("ordenes").delete().eq("id", row['id']).execute()
-                                st.rerun()
+                        if col_c.button("🗑️ Eliminar", key=f"del_{row['id']}"):
+                            supabase.table("ordenes").delete().eq("id", row['id']).execute()
+                            st.rerun()
