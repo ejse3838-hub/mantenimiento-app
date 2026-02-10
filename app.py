@@ -103,28 +103,43 @@ else:
                 mq, tc, pr = c1.selectbox("Máquina", m_list), c2.selectbox("Técnico", p_list), c3.selectbox("Prioridad", ["ALTA", "BAJA"])
                 tt = st.selectbox("Tipo", ["Correctiva", "Preventiva"])
                 cos = st.number_input("Costo ($)", 0.0)
+                
                 if st.form_submit_button("Lanzar"):
-                    # Si esto falla, borra los campos que no tengas en Supabase
                     try:
                         supabase.table("ordenes").insert({
                             "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, 
                             "prioridad": pr, "costo": cos, "tipo_tarea": tt,
                             "estado": "Proceso", "creado_por": st.session_state.user
                         }).execute()
-                        st.success("✅ ¡Orden enviada con éxito!")
+                        st.success("✅ ¡Orden enviada!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error al conectar: {e}")
+                        st.error(f"Error: {e}")
 
         st.divider()
         df_o = pd.DataFrame(cargar("ordenes"))
         if not df_o.empty:
-            for _, row in df_o.iterrows():
-                with st.container(border=True):
-                    st.write(f"**{row['id_maquina']}** | {row['prioridad']}")
-                    st.write(row['descripcion'])
-                    st.write("✒️ Firma Jefe")
-                    st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
-                    if st.button("🗑️ Eliminar", key=f"del_{row['id']}"):
-                        supabase.table("ordenes").delete().eq("id", row['id']).execute()
-                        st.rerun()
+            pasos = {"Proceso": "Realizada", "Realizada": "Revisada", "Revisada": "Finalizada"}
+            for est_actual in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
+                st.subheader(f"📍 {est_actual}")
+                filas = df_o[df_o['estado'] == est_actual]
+                for _, row in filas.iterrows():
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([3, 1, 1])
+                        c1.write(f"**{row['id_maquina']}** | {row['prioridad']}")
+                        c1.caption(f"🔧 {row['descripcion']}")
+                        
+                        if est_actual == "Revisada":
+                            st.write("✒️ Firma Jefe")
+                            st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
+                            if c2.button("Finalizar", key=f"fbtn_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": "Finalizada", "firma_jefe": "OK"}).eq("id", row['id']).execute()
+                                st.rerun()
+                        elif est_actual in pasos:
+                            if c2.button(f"➡️", key=f"av_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": pasos[est_actual]}).eq("id", row['id']).execute()
+                                st.rerun()
+                        
+                        if c3.button("🗑️", key=f"del_{row['id']}"):
+                            supabase.table("ordenes").delete().eq("id", row['id']).execute()
+                            st.rerun()
