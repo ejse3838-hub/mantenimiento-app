@@ -3,19 +3,20 @@ import pandas as pd
 from supabase import create_client, Client
 import urllib.parse
 
-# --- 1. CONEXIÓN (Sin cambios) ---
+# --- 1. CONEXIÓN ---
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-# --- 2. FUNCIÓN DE CARGA (Nueva lógica sin .execute() extra) ---
+# --- 2. FUNCIÓN DE CARGA SEGURA ---
 def cargar_datos(tabla):
     try:
-        # Simplificamos la consulta al máximo
-        query = supabase.table(tabla).select("*").eq("creado_por", st.session_state.user).execute()
-        return query.data if query.data else []
+        # Consulta simple: traemos los datos y los guardamos en 'res'
+        res = supabase.table(tabla).select("*").eq("creado_por", st.session_state.user).execute()
+        # Retornamos solo la lista de datos (.data)
+        return res.data if res.data else []
     except Exception as e:
-        st.error(f"Error en {tabla}: {e}")
+        st.error(f"Error cargando {tabla}: {e}")
         return []
 
 # --- CONFIGURACIÓN ---
@@ -24,7 +25,7 @@ if 'auth' not in st.session_state: st.session_state.auth = False
 
 # --- LOGIN ---
 if not st.session_state.auth:
-    tab1, tab2 = st.tabs(["🔑 Login", "📝 Registro"])
+    tab1, tab2 = st.tabs(["🔑 Iniciar Sesión", "📝 Registro"])
     with tab1:
         u = st.text_input("Usuario")
         p = st.text_input("Clave", type="password")
@@ -34,93 +35,106 @@ if not st.session_state.auth:
                 st.session_state.auth = True
                 st.session_state.user = res.data[0]['email']
                 st.rerun()
-            else: st.error("Fallo de acceso")
+            else: st.error("Datos incorrectos")
     with tab2:
         nu = st.text_input("Nuevo Email")
         np = st.text_input("Nueva Clave", type="password")
-        if st.button("Crear"):
+        if st.button("Crear Cuenta"):
             supabase.table("usuarios").insert({"email": nu, "password": np, "creado_por": nu}).execute()
-            st.success("Creado")
+            st.success("Usuario creado")
 
 else:
-    # --- MENÚ LATERAL ---
+    # --- MENÚ LATERAL (ESTILO RADIO PARA EVITAR ERRORES) ---
     st.sidebar.title(f"👤 {st.session_state.user}")
-    opcion = st.sidebar.radio("Ir a:", ["Inicio", "Personal", "Maquinas", "Ordenes"])
+    opcion = st.sidebar.radio("Navegación:", ["Dashboard", "Personal", "Maquinaria", "Órdenes de Trabajo"])
     
-    if st.sidebar.button("Cerrar Sesión"):
+    if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state.auth = False
         st.rerun()
 
-    # --- PÁGINA: INICIO ---
-    if opcion == "Inicio":
-        st.title("📊 Dashboard")
+    # --- PÁGINA: DASHBOARD ---
+    if opcion == "Dashboard":
+        st.title("📊 Resumen General")
         ordenes = cargar_datos("ordenes")
         if ordenes:
             df = pd.DataFrame(ordenes)
-            st.write("Resumen de actividad:")
-            st.dataframe(df[['descripcion', 'estado', 'id_tecnico']])
+            col1, col2, col3 = st.columns(3)
+            col1.metric("En Proceso", len(df[df['estado'] == 'Proceso']))
+            col2.metric("Realizadas", len(df[df['estado'] == 'Realizada']))
+            col3.metric("Finalizadas", len(df[df['estado'] == 'Finalizada']))
         else:
-            st.info("No hay datos")
+            st.info("No hay datos registrados")
 
     # --- PÁGINA: PERSONAL ---
     elif opcion == "Personal":
-        st.header("👥 Personal")
-        with st.form("per"):
-            n = st.text_input("Nombre")
-            t = st.text_input("WhatsApp")
+        st.header("👥 Gestión de Técnicos")
+        with st.form("form_per"):
+            nombre = st.text_input("Nombre Completo")
+            wpp = st.text_input("WhatsApp (ej: 593987654321)")
             if st.form_submit_button("Guardar"):
-                supabase.table("personal").insert({"nombre": n, "telefono": t, "creado_por": st.session_state.user}).execute()
+                supabase.table("personal").insert({
+                    "nombre": nombre, "telefono": wpp, "creado_por": st.session_state.user
+                }).execute()
                 st.rerun()
+        
         datos_p = cargar_datos("personal")
-        if datos_p: st.table(pd.DataFrame(datos_p)[['nombre', 'telefono']])
+        if datos_p:
+            st.table(pd.DataFrame(datos_p)[["nombre", "telefono"]])
 
-    # --- PÁGINA: MAQUINAS ---
-    elif opcion == "Maquinas":
-        st.header("⚙️ Maquinas")
-        with st.form("maq"):
-            m = st.text_input("Nombre Máquina")
-            if st.form_submit_button("Guardar"):
-                supabase.table("maquinas").insert({"nombre_maquina": m, "creado_por": st.session_state.user}).execute()
+    # --- PÁGINA: MAQUINARIA ---
+    elif opcion == "Maquinaria":
+        st.header("⚙️ Gestión de Equipos")
+        with st.form("form_maq"):
+            maquina = st.text_input("Nombre de Equipo")
+            if st.form_submit_button("Registrar Equipo"):
+                supabase.table("maquinas").insert({
+                    "nombre_maquina": maquina, "creado_por": st.session_state.user
+                }).execute()
                 st.rerun()
+        
         datos_m = cargar_datos("maquinas")
-        if datos_m: st.table(pd.DataFrame(datos_m)[['nombre_maquina']])
+        if datos_m:
+            st.table(pd.DataFrame(datos_m)[["nombre_maquina"]])
 
-    # --- PÁGINA: ORDENES ---
-    elif opcion == "Ordenes":
-        st.header("📑 Gestión de Órdenes")
+    # --- PÁGINA: ÓRDENES ---
+    elif opcion == "Órdenes de Trabajo":
+        st.header("📑 Órdenes de Producción")
         
-        # Cargamos los datos para los selectbox
-        m_list = cargar_datos("maquinas")
-        p_list = cargar_datos("personal")
+        # 1. Cargamos datos brutos
+        m_raw = cargar_datos("maquinas")
+        p_raw = cargar_datos("personal")
         
-        # Transformamos a listas simples (Aquí estaba el error de las líneas anteriores)
-        lista_m = [item['nombre_maquina'] for item in m_list] if m_list else ["Vacio"]
-        lista_p = [item['nombre'] for item in p_list] if p_list else ["Vacio"]
+        # 2. Procesamos nombres (AQUÍ ESTABA EL ERROR, AHORA ESTÁ SEPARADO)
+        nombres_maquinas = [x['nombre_maquina'] for x in m_raw] if m_raw else ["Vacio"]
+        nombres_tecnicos = [x['nombre'] for x in p_raw] if p_raw else ["Vacio"]
 
-        with st.expander("Crear OP"):
-            with st.form("op"):
-                desc = st.text_area("Tarea")
-                sel_m = st.selectbox("Máquina", lista_m)
-                sel_p = st.selectbox("Técnico", lista_p)
-                if st.form_submit_button("Lanzar"):
-                    supabase.table("ordenes").insert({
-                        "descripcion": desc, "id_maquina": sel_m, 
-                        "id_tecnico": sel_p, "estado": "Proceso", 
-                        "creado_por": st.session_state.user
-                    }).execute()
-                    st.rerun()
+        with st.expander("➕ Nueva Orden"):
+            with st.form("form_op"):
+                tarea = st.text_area("Descripción de tarea")
+                sel_m = st.selectbox("Máquina", nombres_maquinas)
+                sel_t = st.selectbox("Técnico", nombres_tecnicos)
+                if st.form_submit_button("Crear"):
+                    if sel_m == "Vacio" or sel_t == "Vacio":
+                        st.error("Registra maquinaria y personal primero")
+                    else:
+                        supabase.table("ordenes").insert({
+                            "descripcion": tarea, "id_maquina": sel_m, 
+                            "id_tecnico": sel_t, "estado": "Proceso", 
+                            "creado_por": st.session_state.user
+                        }).execute()
+                        st.rerun()
 
-        # Visualización de órdenes
-        o_list = cargar_datos("ordenes")
-        if o_list:
-            df_o = pd.DataFrame(o_list)
-            for est in ["Proceso", "Realizada", "Finalizada"]:
-                st.subheader(f"Estado: {est}")
-                filtro = df_o[df_o['estado'] == est]
-                for _, fila in filtro.iterrows():
+        # Listado de órdenes
+        o_raw = cargar_datos("ordenes")
+        if o_raw:
+            df_o = pd.DataFrame(o_raw)
+            for e in ["Proceso", "Realizada", "Finalizada"]:
+                st.subheader(f"📍 {e}")
+                items = df_o[df_o['estado'] == e]
+                for _, fila in items.iterrows():
                     with st.container(border=True):
-                        col1, col2 = st.columns([4,1])
-                        col1.write(f"{fila['descripcion']} | {fila['id_tecnico']}")
-                        if col2.button("🗑️", key=f"del_{fila['id']}"):
+                        c1, c2 = st.columns([4, 1])
+                        c1.write(f"**{fila['id_maquina']}**: {fila['descripcion']} - {fila['id_tecnico']}")
+                        if c2.button("🗑️", key=f"del_{fila['id']}"):
                             supabase.table("ordenes").delete().eq("id", fila['id']).execute()
                             st.rerun()
