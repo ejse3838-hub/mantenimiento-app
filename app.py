@@ -116,54 +116,60 @@ elif menu == "⚙️ Maquinaria":
             except Exception as e: st.error(f"Error: {e}")
     st.dataframe(pd.DataFrame(cargar_datos("maquinas")), use_container_width=True)
 
-# --- 8. ÓRDENES DE PRODUCCIÓN (CORREGIDO: CAMPO DE HORA ÚNICO) ---
-elif menu == "📑 Órdenes de Trabajo (OP)":
-    st.header("📑 Sistema de Gestión de Órdenes de Producción")
+# --- 8. MÓDULO: ÓRDENES (VERSIÓN LIMPIA Y SIN ERRORES DE HORA) ---
+elif menu == "📑 Órdenes de Producción":
+    st.header("📑 Gestión de Órdenes")
     
     # DATOS PARA SELECTORES
     mq_list = [m['nombre_maquina'] for m in cargar_datos("maquinas")]
     tc_list = [f"{p['nombre']} {p['apellido']}" for p in cargar_datos("personal")]
 
-    with st.expander("🚀 Lanzar Nueva Orden de Trabajo (OP)", expanded=False):
-        with st.form("form_op_maestro"):
+    with st.expander("🚀 Lanzar Nueva Orden", expanded=True):
+        with st.form("f_op_final"):
             desc = st.text_area("Descripción de la Tarea")
             c1, c2, c3 = st.columns(3)
-            mq = c1.selectbox("Seleccionar Máquina", mq_list)
-            tc = c2.selectbox("Asignar Técnico", tc_list)
+            
+            # Selectores básicos
+            mq = c1.selectbox("Máquina", mq_list if mq_list else [""])
+            tc = c2.selectbox("Técnico", tc_list if tc_list else [""])
             prio = c3.selectbox("Prioridad", ["ALTA", "NORMAL", "BAJA"])
             
-            tipo = c1.selectbox("Tipo de Tarea", ["Correctiva", "Preventiva", "Predictiva"])
-            freq = c2.selectbox("Frecuencia", ["Única", "Diaria", "Semanal", "Mensual", "Semestral", "Anual"])
-            
-            # CAMPO ÚNICO PARA DURACIÓN (SOLUCIÓN AL ERROR)
-            dur_total = c3.text_input("Duración Estimada (ej: 2h 30min)")
+            # Campos de texto simple para evitar errores de formato
+            tipo = c1.text_input("Tipo (ej: Correctiva)")
+            freq = c2.text_input("Frecuencia (ej: Semanal)")
+            dur = c3.text_input("Duración Estimada (ej: 2 horas)") # AQUÍ PONES LA HORA TÚ MISMO
             
             paro = c1.selectbox("¿Requiere Paro?", ["Sí", "No"])
-            herr = c2.text_input("Herramientas Necesarias")
-            insu = c3.text_input("Insumos / Repuestos")
-            costo = st.number_input("Costo Estimado ($)", 0.0)
+            herr = c2.text_input("Herramientas")
+            insu = c3.text_input("Insumos")
+            costo = st.number_input("Costo ($)", value=0.0, step=0.1)
             
-            if st.form_submit_button("📡 Lanzar Orden a Recepción"):
+            if st.form_submit_button("📡 Lanzar Orden"):
+                # Diccionario de datos con nombres EXACTOS de tu Supabase
+                datos_para_enviar = {
+                    "descripcion": str(desc),
+                    "id_maquina": str(mq),
+                    "id_tecnico": str(tc),
+                    "estado": "Recepción",
+                    "tipo_tarea": str(tipo),
+                    "frecuencia": str(freq),
+                    "duracion_estimada": str(dur),
+                    "requiere_paro": str(paro),
+                    "herramientas": str(herr),
+                    "prioridad": str(prio),
+                    "insumos": str(insu),
+                    "costo": float(costo),
+                    "creado_por": str(st.session_state.user)
+                }
+                
                 try:
-                    supabase.table("ordenes").insert({
-                        "descripcion": desc, 
-                        "id_maquina": mq, 
-                        "id_tecnico": tc, 
-                        "estado": "Recepción",
-                        "tipo_tarea": tipo, 
-                        "frecuencia": freq, 
-                        "duracion_estimada": dur_total, # Se envía como texto directo
-                        "requiere_paro": paro, 
-                        "herramientas": herr, 
-                        "prioridad": prio,
-                        "insumos": insu, 
-                        "costo": float(costo), 
-                        "creado_por": st.session_state.user
-                    }).execute()
-                    st.success("Orden en etapa de Recepción"); st.rerun()
-                except Exception as e:
-                    st.error(f"Error al guardar: {e}")
-
+                    # Intento de inserción directa
+                    supabase.table("ordenes").insert(datos_para_enviar).execute()
+                    st.success("✅ Orden creada con éxito")
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"Error detectado: {error}")
+                    
     # EL TABLERO DINÁMICO
     st.divider()
     df_op = pd.DataFrame(cargar_datos("ordenes"))
@@ -191,4 +197,5 @@ elif menu == "📑 Órdenes de Trabajo (OP)":
         with t4: # REVISADAS
             st.dataframe(df_op[df_op['estado'] == "Revisada por Jefe"], use_container_width=True)
     else: st.info("No hay órdenes activas.")
+
 
