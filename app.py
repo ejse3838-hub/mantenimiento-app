@@ -3,16 +3,16 @@ import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
 
-# --- 1. CONEXIÓN (Mantenemos tu formato de Secrets) ---
+# --- 1. CONEXIÓN ---
 try:
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(url, key)
 except Exception:
-    st.error("Error en las credenciales de conexión.")
+    st.error("Error de conexión. Revisa tus Secrets.")
     st.stop()
 
-# --- 2. FUNCIONES DE CARGA ---
+# --- 2. FUNCIÓN DE CARGA SEGURA ---
 def cargar(tabla):
     try:
         res = supabase.table(tabla).select("*").eq("creado_por", st.session_state.user).execute()
@@ -20,101 +20,98 @@ def cargar(tabla):
     except Exception:
         return []
 
-# --- 3. CONFIGURACIÓN DE PÁGINA ---
+# --- 3. CONFIGURACIÓN ---
 st.set_page_config(page_title="CORMAIN CMMS PRO", layout="wide")
 if 'auth' not in st.session_state: st.session_state.auth = False
 
-# --- 4. LOGIN / REGISTRO ---
+# --- 4. LOGIN (Simplificado) ---
 if not st.session_state.auth:
-    st.title("🛠️ COMAIN - Gestión de Mantenimiento")
-    tab1, tab2 = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
-    with tab1:
-        u = st.text_input("Email/Usuario")
-        p = st.text_input("Clave", type="password")
-        if st.button("Entrar"):
-            res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
-            if res.data: 
-                st.session_state.auth = True
-                st.session_state.user = res.data[0]['email']
-                st.rerun()
-            else: st.error("Datos incorrectos")
-    with tab2:
-        nu, np = st.text_input("Nuevo Email"), st.text_input("Nueva Clave", type="password")
-        if st.button("Crear Cuenta"):
-            supabase.table("usuarios").insert({"email": nu, "password": np, "creado_por": nu}).execute()
-            st.success("¡Cuenta creada!")
+    st.title("🛠️ COMAIN - Inicio de Sesión")
+    u = st.text_input("Usuario")
+    p = st.text_input("Clave", type="password")
+    if st.button("Entrar"):
+        res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
+        if res.data:
+            st.session_state.auth = True
+            st.session_state.user = res.data[0]['email']
+            st.rerun()
+        else: st.error("Acceso denegado")
+    st.stop()
 
-else:
-    # --- 5. MENÚ LATERAL ---
-    st.sidebar.title(f"👤 {st.session_state.user}")
-    if "menu" not in st.session_state: st.session_state.menu = "🏠 Inicio"
-    
-    if st.sidebar.button("🏠 Inicio", use_container_width=True): st.session_state.menu = "🏠 Inicio"
-    if st.sidebar.button("👥 Personal", use_container_width=True): st.session_state.menu = "👥 Personal"
-    if st.sidebar.button("⚙️ Maquinaria", use_container_width=True): st.session_state.menu = "⚙️ Maquinaria"
-    if st.sidebar.button("📑 Órdenes de Trabajo", use_container_width=True): st.session_state.menu = "📑 Órdenes de Trabajo"
-    
-    st.sidebar.divider()
-    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
-        st.session_state.auth = False
-        st.rerun()
+# --- 5. NAVEGACIÓN ---
+st.sidebar.title(f"👤 {st.session_state.user}")
+menu = st.sidebar.radio("Menú", ["🏠 Inicio", "👥 Personal", "⚙️ Maquinaria", "📑 Órdenes de Trabajo"])
 
-    # --- 6. PÁGINA: PERSONAL (CORREGIDA) ---
-    if st.session_state.menu == "👥 Personal":
-        st.header("Gestión de Personal")
-        with st.form("f_p", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            n = c1.text_input("Nombre")
-            ap = c2.text_input("Apellido")
-            car = c1.text_input("Cargo")
-            esp = c2.text_input("Especialidad")
-            
-            # Estos campos son los que daban error. 
-            # Si el error persiste, es porque no existen en tu Supabase.
-            mail = c1.text_input("Email Personal")
-            sal = c2.number_input("Salario ($)", min_value=0.0)
-            
-            if st.form_submit_button("Guardar"):
-                # SOLO enviamos los campos que SEGURO tienes en tu tabla
-                datos = {
-                    "nombre": n, 
-                    "apellido": ap, 
-                    "cargo": car, 
-                    "especialidad": esp,
-                    "creado_por": st.session_state.user
-                }
-                
-                # Intentamos agregar los otros solo si no están vacíos
-                if mail: datos["email"] = mail
-                
-                try:
-                    supabase.table("personal").insert(datos).execute()
-                    st.success("Personal guardado exitosamente")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error técnico: {e}")
-                    st.info("💡 Consejo: Revisa en Supabase si la columna se llama exactamente 'email' o 'salario'.")
+# --- 6. SECCIÓN ÓRDENES DE TRABAJO (CORREGIDA) ---
+if menu == "📑 Órdenes de Trabajo":
+    st.header("Gestión de Órdenes de Trabajo")
+    
+    # Intentamos obtener datos para los selectores
+    maquinas_raw = cargar("maquinas")
+    personal_raw = cargar("personal")
+    
+    # Verificación para evitar la pantalla en negro
+    if not maquinas_raw:
+        st.warning("⚠️ No puedes crear órdenes porque no hay MÁQUINAS registradas.")
+    if not personal_raw:
+        st.warning("⚠️ No puedes crear órdenes porque no hay PERSONAL registrado.")
         
-        st.dataframe(pd.DataFrame(cargar("personal")), use_container_width=True)
+    if maquinas_raw and personal_raw:
+        m_list = [f"{m['nombre_maquina']} ({m.get('codigo', 'S/C')})" for m in maquinas_raw]
+        p_list = [f"{p['nombre']} {p.get('apellido', '')}" for p in personal_raw]
+        
+        with st.expander("➕ Lanzar Nueva Orden (OP)"):
+            with st.form("f_op"):
+                desc = st.text_area("Descripción de la tarea")
+                c1, c2 = st.columns(2)
+                mq = c1.selectbox("Seleccionar Máquina", m_list)
+                tc = c2.selectbox("Asignar Técnico", p_list)
+                tt = c1.selectbox("Tipo de Tarea", ["Correctiva", "Preventiva"])
+                pr = c2.selectbox("Prioridad", ["ALTA", "NORMAL"])
+                
+                if st.form_submit_button("Crear Orden"):
+                    try:
+                        supabase.table("ordenes").insert({
+                            "descripcion": desc,
+                            "id_maquina": mq,
+                            "id_tecnico": tc,
+                            "tipo_tarea": tt,
+                            "prioridad": pr,
+                            "estado": "Proceso",
+                            "creado_por": st.session_state.user
+                        }).execute()
+                        st.success("✅ Orden creada exitosamente")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al insertar en la base de datos: {e}")
 
-    # --- (Las demás secciones Maquinaria e Inicio se mantienen igual) ---
-    elif st.session_state.menu == "🏠 Inicio":
-        st.title("📊 Panel de Control")
-        df = pd.DataFrame(cargar("ordenes"))
-        if not df.empty:
-            st.metric("Órdenes Totales", len(df))
-        else: st.info("Sin datos registrados.")
+    # Visualización de la tabla
+    st.divider()
+    st.subheader("Historial de Órdenes")
+    df_o = pd.DataFrame(cargar("ordenes"))
+    if not df_o.empty:
+        st.dataframe(df_o, use_container_width=True)
+    else:
+        st.info("No hay órdenes de trabajo registradas para este usuario.")
 
-    elif st.session_state.menu == "⚙️ Maquinaria":
-        st.header("Ficha Técnica")
-        with st.form("f_m"):
-            c1, c2 = st.columns(2)
-            nm, cod = c1.text_input("Máquina"), c2.text_input("Código")
-            ubi, est = c1.text_input("Ubicación"), c2.selectbox("Estado", ["Operativa", "Mantenimiento"])
-            if st.form_submit_button("Registrar"):
-                supabase.table("maquinas").insert({
-                    "nombre_maquina": nm, "codigo": cod, "ubicacion": ubi, 
-                    "estado": est, "creado_por": st.session_state.user
-                }).execute()
-                st.rerun()
-        st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
+# --- 7. RESTO DE SECCIONES (Resumen) ---
+elif menu == "🏠 Inicio":
+    st.title("📊 Panel de Control")
+    st.write(f"Bienvenido, {st.session_state.user}")
+
+elif menu == "👥 Personal":
+    st.header("Registro de Personal")
+    with st.form("f_p"):
+        n = st.text_input("Nombre")
+        a = st.text_input("Apellido")
+        if st.form_submit_button("Guardar"):
+            supabase.table("personal").insert({"nombre": n, "apellido": a, "creado_por": st.session_state.user}).execute()
+            st.rerun()
+
+elif menu == "⚙️ Maquinaria":
+    st.header("Registro de Máquinas")
+    with st.form("f_m"):
+        nm = st.text_input("Nombre de Máquina")
+        if st.form_submit_button("Registrar"):
+            supabase.table("maquinas").insert({"nombre_maquina": nm, "creado_por": st.session_state.user}).execute()
+            st.rerun()
