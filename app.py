@@ -52,33 +52,38 @@ else:
         st.session_state.auth = False
         st.rerun()
 
-    # --- 1. INICIO ---
+    # --- 1. INICIO (DASHBOARD) ---
     if st.session_state.menu == "🏠 Inicio":
         st.title("📊 Panel de Control")
         df = pd.DataFrame(cargar("ordenes"))
         if not df.empty:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Órdenes", len(df))
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("En Proceso", len(df[df['estado'] == 'Proceso']))
+            c2.metric("Realizadas", len(df[df['estado'] == 'Realizada']))
+            c3.metric("Finalizadas", len(df[df['estado'] == 'Finalizada']))
             if 'costo' in df.columns:
-                c2.metric("Inversión", f"${df['costo'].sum():,.2f}")
+                c4.metric("Inversión Total", f"${df['costo'].sum():,.2f}")
+            
             import plotly.express as px
-            fig = px.pie(df, names='estado', hole=0.4, title="Resumen Operativo")
+            fig = px.pie(df, names='estado', hole=0.4, title="Distribución de Estados")
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("Sin datos registrados")
+        else: st.info("Sin datos registrados.")
 
     # --- 2. PERSONAL ---
     elif st.session_state.menu == "👥 Personal":
-        st.header("Registro de Personal")
+        st.header("Gestión de Personal")
         with st.form("f_personal"):
             c1, c2, c3 = st.columns(3)
             nom, ape = c1.text_input("Nombres"), c2.text_input("Apellidos")
-            cod_e = c3.text_input("Código")
+            cod_e = c3.text_input("Código Empleado")
             mail, car = c1.text_input("Email"), c2.text_input("Cargo")
             dire = c3.text_input("Dirección")
-            cl1 = c1.selectbox("Clasificación 1", ["Interno", "Contratista"])
-            cl2 = c2.selectbox("Especialidad", ["Mecánico", "Eléctrico", "Instrumentista"])
-            st.write("✒️ Firma Maestra")
+            cl1 = c1.selectbox("Clasificación 1", ["Interno", "Externo"])
+            cl2 = c2.selectbox("Especialidad", ["Mecánico", "Eléctrico", "Operador"])
+            
+            st.write("✒️ **Firma Digital**")
             st_canvas(stroke_width=2, stroke_color="black", height=100, width=400, key="p_sign")
+            
             if st.form_submit_button("Guardar"):
                 supabase.table("personal").insert({
                     "nombre": f"{nom} {ape}", "apellido": ape, "codigo_empleado": cod_e,
@@ -90,10 +95,10 @@ else:
 
     # --- 3. MAQUINARIA ---
     elif st.session_state.menu == "⚙️ Maquinaria":
-        st.header("Ficha Técnica")
+        st.header("Ficha Técnica de Equipos")
         with st.form("f_maq"):
             c1, c2, c3 = st.columns(3)
-            nm, cod, ubi = c1.text_input("Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
+            nm, cod, ubi = c1.text_input("Nombre Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
             fab, mod, ser = c1.text_input("Fabricante"), c2.text_input("Modelo"), c3.text_input("Serial")
             est = c1.selectbox("Estado", ["Operativa", "Falla", "Mantenimiento"])
             hu = c2.number_input("Horas Uso", min_value=0)
@@ -109,10 +114,11 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 4. ÓRDENES ---
+    # --- 4. ÓRDENES (REVISADO LÍNEA POR LÍNEA) ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de OP")
-        m_data, p_data = cargar("maquinas"), cargar("personal")
+        m_data = cargar("maquinas")
+        p_data = cargar("personal")
         m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in m_data] if m_data else ["Registrar máquinas"]
         p_list = [p['nombre'] for p in p_data] if p_data else ["Registrar personal"]
 
@@ -121,12 +127,16 @@ else:
                 desc = st.text_area("Descripción")
                 c1, c2, c3 = st.columns(3)
                 mq, tc, pr = c1.selectbox("Máquina", m_list), c2.selectbox("Técnico", p_list), c3.selectbox("Prioridad", ["🔴 ALTA", "🟡 MEDIA", "🟢 BAJA"])
+                
                 c4, c5, c6 = st.columns(3)
                 tt, fr, dur = c4.selectbox("Tipo", ["Correctiva", "Preventiva"]), c5.selectbox("Frecuencia", ["Mensual", "Semanal"]), c6.text_input("Duración", "1h")
+                
                 c7, c8, c9 = st.columns(3)
                 paro, her, cos = c7.selectbox("Paro", ["No", "Sí"]), c8.text_input("Herramientas"), c9.number_input("Costo", 0.0)
                 ins = st.text_input("Insumos")
+
                 if st.form_submit_button("Lanzar"):
+                    # SINCRONIZACIÓN CON TUS 15 COLUMNAS DE SUPABASE
                     supabase.table("ordenes").insert({
                         "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, "estado": "Proceso",
                         "tipo_tarea": tt, "frecuencia": fr, "duracion_estimada": dur, "requiere_paro": paro,
