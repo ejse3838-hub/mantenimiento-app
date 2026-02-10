@@ -3,3 +3,4 @@ supabase
 plotly
 streamlit-drawable-canvas
 pandas
+
