@@ -14,7 +14,7 @@ url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-# --- FUNCIÓN DE CARGA DINÁMICA ---
+# --- FUNCIÓN DE CARGA FILTRADA POR USUARIO ---
 def cargar(tabla):
     try:
         res = supabase.table(tabla).select("*").eq("creado_por", st.session_state.user).execute()
@@ -24,9 +24,9 @@ def cargar(tabla):
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="CORMAIN CMMS PRO", layout="wide")
 
+# --- LOGIN ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 
-# --- LOGIN Y REGISTRO ---
 if not st.session_state.auth:
     tab1, tab2 = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
     with tab1:
@@ -49,7 +49,7 @@ if not st.session_state.auth:
             except: st.error("Error al crear cuenta.")
 
 else:
-    # --- MENÚ LATERAL (BOTONES) ---
+    # --- MENÚ LATERAL ---
     st.sidebar.title(f"👤 {st.session_state.user}")
     if "menu" not in st.session_state: st.session_state.menu = "🏠 Inicio"
 
@@ -63,11 +63,113 @@ else:
         st.session_state.auth = False
         st.rerun()
 
-    # --- PÁGINA: INICIO ---
+    # --- 1. INICIO ---
     if st.session_state.menu == "🏠 Inicio":
         st.title("📊 Panel de Control")
         o_data = cargar("ordenes")
-        if o_data:
-            df = pd.DataFrame(o_data)
+        df = pd.DataFrame(o_data)
+        if not df.empty:
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("En Proceso", len(df[df
+            c1.metric("En Proceso", len(df[df['estado'] == 'Proceso']))
+            c2.metric("Realizadas", len(df[df['estado'] == 'Realizada']))
+            c3.metric("Revisadas", len(df[df['estado'] == 'Revisada']))
+            c4.metric("Finalizadas", len(df[df['estado'] == 'Finalizada']))
+            
+            if GRAFICOS_LISTOS:
+                st.divider()
+                colg1, colg2 = st.columns(2)
+                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado Global")
+                colg1.plotly_chart(fig1, use_container_width=True)
+                fig2 = px.pie(df, names='id_tecnico', hole=0.4, title="Carga por Técnico")
+                colg2.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No hay datos para mostrar.")
+
+    # --- 2. PERSONAL ---
+    elif st.session_state.menu == "👥 Personal":
+        st.header("Gestión de Personal")
+        with st.form("f_pers"):
+            c1, c2 = st.columns(2)
+            nom = c1.text_input("Nombres")
+            ape = c2.text_input("Apellidos")
+            car = c1.text_input("Cargo")
+            pue = c2.text_input("Puesto")
+            if st.form_submit_button("Guardar"):
+                supabase.table("personal").insert({
+                    "nombre": f"{nom} {ape}", 
+                    "cargo": car, 
+                    "especialidad": pue, 
+                    "creado_por": st.session_state.user
+                }).execute()
+                st.rerun()
+        st.table(pd.DataFrame(cargar("personal"))[["nombre", "cargo", "especialidad"]])
+
+    # --- 3. MAQUINARIA ---
+    elif st.session_state.menu == "⚙️ Maquinaria":
+        st.header("Gestión de Maquinas")
+        with st.form("f_maq"):
+            c1, c2 = st.columns(2)
+            n_m = c1.text_input("Máquina")
+            cod = c2.text_input("Código de Máquina")
+            est = st.selectbox("Estado", ["Operativa", "Falla"])
+            if st.form_submit_button("Registrar"):
+                supabase.table("maquinas").insert({
+                    "nombre_maquina": n_m, 
+                    "codigo": cod,
+                    "estado": est, 
+                    "creado_por": st.session_state.user
+                }).execute()
+                st.rerun()
+        st.table(pd.DataFrame(cargar("maquinas"))[["nombre_maquina", "codigo", "estado"]])
+
+    # --- 4. ÓRDENES DE TRABAJO ---
+    elif st.session_state.menu == "📑 Órdenes de Trabajo":
+        st.header("Órdenes de Producción")
+        
+        with st.expander("➕ Crear Nueva"):
+            maqs_data = cargar("maquinas")
+            # Mostramos Nombre + Código en el selector
+            maqs_opciones = [f"{m['nombre_maquina']} ({m['codigo']})" for m in maqs_data]
+            pers_data = cargar("personal")
+            tec_opciones = [p['nombre'] for p in pers_data]
+            
+            with st.form("f_orden"):
+                desc = st.text_area("Descripción")
+                c1, c2 = st.columns(2)
+                maq = c1.selectbox("Máquina", maqs_opciones)
+                tec = c2.selectbox("Técnico", tec_opciones)
+                frec = st.selectbox("Periodicidad", ["Correctiva", "Diaria", "Semanal", "Mensual", "Anual"])
+                
+                if st.form_submit_button("Lanzar"):
+                    supabase.table("ordenes").insert({
+                        "descripcion": desc, 
+                        "id_maquina": maq, 
+                        "id_tecnico": tec,
+                        "frecuencia": frec,
+                        "estado": "Proceso", 
+                        "creado_por": st.session_state.user
+                    }).execute()
+                    st.rerun()
+
+        st.divider()
+        df_o = pd.DataFrame(cargar("ordenes"))
+        if not df_o.empty:
+            pasos = {"Proceso": "Realizada", "Realizada": "Revisada", "Revisada": "Finalizada"}
+            for est in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
+                st.subheader(f"📍 {est}")
+                items = df_o[df_o['estado'] == est]
+                for _, row in items.iterrows():
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([3, 1, 1])
+                        c1.write(f"**{row['id_maquina']}**: {row['descripcion']} ({row['id_tecnico']})")
+                        c1.caption(f"⏱️ Periodicidad: {row.get('frecuencia', 'N/A')}")
+                        
+                        if est in pasos:
+                            if c2.button(f"➡️ {pasos[est]}", key=f"av_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": pasos[est]}).eq("id", row['id']).execute()
+                                st.rerun()
+                        
+                        if est in ["Proceso", "Finalizada"]:
+                            if c3.button("🗑️ Eliminar", key=f"del_{row['id']}"):
+                                supabase.table("ordenes").delete().eq("id", row['id']).execute()
+                                st.rerun()
