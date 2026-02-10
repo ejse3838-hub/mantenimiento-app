@@ -153,8 +153,7 @@ else:
                         "duracion_estimada": dur, "requiere_paro": paro,
                         "herramientas": herr, "prioridad": prio, "insumos": insu,
                         "costo": cost, "creado_por": st.session_state.user
-                    }).execute()
-                    st.rerun()
+                    }) st.rerun()
 
         st.divider()
         df_o = pd.DataFrame(cargar("ordenes"))
@@ -188,3 +187,4 @@ else:
                         if c3.button("🗑️", key=f"del_{row['id']}"):
                             supabase.table("ordenes").delete().eq("id", row['id']).execute()
                             st.rerun()
+
