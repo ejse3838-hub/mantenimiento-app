@@ -166,4 +166,24 @@ else:
         df_o = pd.DataFrame(cargar("ordenes"))
         if not df_o.empty:
             pasos = {"Proceso": "Realizada", "Realizada": "Revisada", "Revisada": "Finalizada"}
-            for est_actual in ["Proceso", "Realizada", "Revisada
+            for est_actual in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
+                st.subheader(f"📍 {est_actual}")
+                filas = df_o[df_o['estado'] == est_actual]
+                for _, row in filas.iterrows():
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([3, 1, 1])
+                        c1.write(f"**{row['id_maquina']}** | {row['prioridad']}")
+                        c1.caption(f"🔧 {row['descripcion']}")
+                        if est_actual == "Revisada":
+                            st.write("✒️ Firma Jefe de Mantenimiento")
+                            st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
+                            if c2.button("Finalizar", key=f"fbtn_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": "Finalizada", "firma_jefe": "APROBADO"}).eq("id", row['id']).execute()
+                                st.rerun()
+                        elif est_actual in pasos:
+                            if c2.button("➡️", key=f"av_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": pasos[est_actual]}).eq("id", row['id']).execute()
+                                st.rerun()
+                        if c3.button("🗑️", key=f"del_{row['id']}"):
+                            supabase.table("ordenes").delete().eq("id", row['id']).execute()
+                            st.rerun()
