@@ -71,10 +71,10 @@ else:
         with st.form("f_p"):
             c1, c2, c3 = st.columns(3)
             nom, ape = c1.text_input("Nombre"), c2.text_input("Apellido")
-            cod_e, car = c3.text_input("Código"), c1.text_input("Cargo")
-            esp, cl1 = c2.text_input("Especialidad"), c3.selectbox("Clasificación", ["Interno", "Externo"])
+            cod_e, car = c3.text_input("Código Empleado"), c1.text_input("Cargo")
+            esp, cl1 = c2.text_input("Especialidad"), c3.selectbox("Clasificación 1", ["Interno", "Externo"])
             mail, dir_p = c1.text_input("Email"), c2.text_input("Dirección")
-            st.write("✒️ **Firma Maestra**")
+            st.write("✒️ **Firma Maestra del Técnico**")
             st_canvas(stroke_width=2, stroke_color="black", height=100, width=400, key="p_sign")
             if st.form_submit_button("Guardar"):
                 supabase.table("personal").insert({
@@ -87,16 +87,16 @@ else:
 
     # --- 3. MAQUINARIA (12 CAMPOS) ---
     elif menu == "⚙️ Maquinaria":
-        st.header("Ficha Técnica")
+        st.header("Ficha Técnica de Equipos")
         with st.form("f_m"):
             c1, c2, c3 = st.columns(3)
-            nm, cod, ubi = c1.text_input("Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
+            nm, cod, ubi = c1.text_input("Nombre Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
             ser, fab, mod = c1.text_input("Serial"), c2.text_input("Fabricante"), c3.text_input("Modelo")
             est = c1.selectbox("Estado", ["Operativa", "Falla", "Mantenimiento"])
             hu = c2.number_input("Horas Uso", min_value=0)
             fc = c3.date_input("Fecha Compra")
             a1, a2 = st.text_area("Apartado 1"), st.text_area("Apartado 2")
-            if st.form_submit_button("Registrar"):
+            if st.form_submit_button("Registrar Equipo"):
                 supabase.table("maquinas").insert({
                     "nombre_maquina": nm, "codigo": cod, "ubicacion": ubi, "estado": est,
                     "serial": ser, "fabricante": fab, "modelo": mod, "horas_uso": hu,
@@ -110,18 +110,18 @@ else:
     elif menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de OP")
         m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in cargar("maquinas")]
-        p_list = [p['nombre'] for p in cargar("personal")]
+        p_list = [f"{p['nombre']} {p['apellido']}" for p in cargar("personal")]
         with st.expander("➕ Lanzar Nueva OP"):
             with st.form("f_op"):
                 desc = st.text_area("Descripción")
                 c1, c2, c3 = st.columns(3)
                 mq, tc, pr = c1.selectbox("Máquina", m_list), c2.selectbox("Técnico", p_list), c3.selectbox("Prioridad", ["🔴 ALTA", "🟡 MEDIA", "🟢 BAJA"])
                 c4, c5, c6 = st.columns(3)
-                tt, fr, dur = c4.selectbox("Tipo", ["Correctiva", "Preventiva"]), c5.selectbox("Frecuencia", ["Mensual", "Semanal"]), c6.text_input("Duración", "1h")
+                tt, fr, dur = c4.selectbox("Tipo Tarea", ["Correctiva", "Preventiva"]), c5.selectbox("Frecuencia", ["Mensual", "Semanal", "Única"]), c6.text_input("Duración Estimada", "1h")
                 c7, c8, c9 = st.columns(3)
-                paro, her, cos = c7.selectbox("Paro", ["No", "Sí"]), c8.text_input("Herramientas"), c9.number_input("Costo", 0.0)
+                paro, her, cos = c7.selectbox("Requiere Paro", ["No", "Sí"]), c8.text_input("Herramientas"), c9.number_input("Costo Estimado", 0.0)
                 ins = st.text_input("Insumos")
-                if st.form_submit_button("Lanzar"):
+                if st.form_submit_button("Lanzar Orden"):
                     supabase.table("ordenes").insert({
                         "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, "estado": "Proceso",
                         "tipo_tarea": tt, "frecuencia": fr, "duracion_estimada": dur, "requiere_paro": paro,
@@ -136,8 +136,8 @@ else:
                 with st.container(border=True):
                     st.write(f"**{row['id_maquina']}** | {row['prioridad']}")
                     st.caption(f"🔧 {row['descripcion']}")
-                    st.write("✒️ **Firma Jefe**")
+                    st.write("✒️ **Firma de Aprobación del Jefe**")
                     st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
-                    if st.button("🗑️ Eliminar", key=f"del_{row['id']}"):
+                    if st.button("🗑️ Eliminar Orden", key=f"del_{row['id']}"):
                         supabase.table("ordenes").delete().eq("id", row['id']).execute()
                         st.rerun()
