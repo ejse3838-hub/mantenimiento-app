@@ -67,11 +67,9 @@ else:
             import plotly.express as px
             g1, g2, g3 = st.columns(3)
             
-            # Gráfico 1: Estado
-            g1.plotly_chart(px.pie(df, names='estado', hole=0.4, title="Estados"), use_container_width=True)
-            # Gráfico 2: Prioridad
-            g2.plotly_chart(px.pie(df, names='prioridad', hole=0.4, title="Prioridad"), use_container_width=True)
-            # Gráfico 3: Tipo de Tarea
+            # Gráficos circulares restaurados
+            g1.plotly_chart(px.pie(df, names='estado', hole=0.4, title="Estado de Órdenes"), use_container_width=True)
+            g2.plotly_chart(px.pie(df, names='prioridad', hole=0.4, title="Carga por Prioridad"), use_container_width=True)
             if 'tipo_tarea' in df.columns:
                 g3.plotly_chart(px.pie(df, names='tipo_tarea', hole=0.4, title="Tipo de Tarea"), use_container_width=True)
         else: st.info("Sin datos registrados.")
@@ -87,14 +85,14 @@ else:
             cl1 = c1.selectbox("Clasificación", ["Interno", "Externo"])
             dir_p = c2.text_input("Dirección")
             
-            st.write("✒️ **Firma Digital del Técnico**")
+            st.write("✒️ **Firma del Técnico**")
             st_canvas(stroke_width=2, stroke_color="black", height=100, width=400, key="p_sign")
             
             if st.form_submit_button("Guardar"):
                 supabase.table("personal").insert({
                     "nombre": n, "apellido": a, "cargo": car, "especialidad": esp,
                     "codigo_empleado": cod_e, "email": mail, "clasificacion1": cl1,
-                    "direccion": dir_p, "firma_path": "REGISTRADA",
+                    "direccion": dir_p, "firma_path": "SI",
                     "creado_por": st.session_state.user
                 }).execute()
                 st.rerun()
@@ -125,7 +123,7 @@ else:
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de OP")
         m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in cargar("maquinas")]
-        p_list = [f"{p['nombre']} {p['apellido']}" for p in cargar("personal")]
+        p_list = [p['nombre'] for p in cargar("personal")]
         
         with st.expander("➕ Lanzar Nueva OP"):
             with st.form("f_op"):
@@ -161,7 +159,7 @@ else:
                         c1.caption(f"🔧 {row['descripcion']}")
                         
                         if est_actual == "Revisada":
-                            st.write("✒️ **Firma Jefe de Mantenimiento**")
+                            st.write("✒️ **Firma Jefe de Planta**")
                             st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
                             if c2.button("Finalizar", key=f"fbtn_{row['id']}"):
                                 supabase.table("ordenes").update({"estado": "Finalizada", "firma_jefe": "OK"}).eq("id", row['id']).execute()
