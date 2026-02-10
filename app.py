@@ -16,7 +16,7 @@ def cargar(tabla):
     except Exception:
         return []
 
-# --- CONFIGURACIÓN DE PÁGINA ---
+# --- CONFIGURACIÓN ---
 st.set_page_config(page_title="CORMAIN CMMS PRO", layout="wide")
 if 'auth' not in st.session_state: st.session_state.auth = False
 
@@ -24,7 +24,7 @@ if 'auth' not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
     tab1, tab2 = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
     with tab1:
-        u = st.text_input("Email/Usuario")
+        u = st.text_input("Usuario (Email)")
         p = st.text_input("Clave", type="password")
         if st.button("Entrar"):
             res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
@@ -65,21 +65,20 @@ else:
             col_a, col_b = st.columns(2)
             fig1 = px.pie(df, names='estado', title="Distribución por Estado", hole=0.4)
             col_a.plotly_chart(fig1, use_container_width=True)
-            
             fig2 = px.bar(df, x='prioridad', color='prioridad', title="Órdenes por Prioridad")
             col_b.plotly_chart(fig2, use_container_width=True)
         else: st.info("Sin datos para mostrar estadísticas.")
 
-    # --- 2. PERSONAL (RESTAURADO 9 CAMPOS + FIRMA) ---
+    # --- 2. PERSONAL (9 CAMPOS + FIRMA) ---
     elif menu == "👥 Personal":
         st.header("Gestión de Personal")
-        with st.form("f_personal_full"):
+        with st.form("f_personal"):
             c1, c2, c3 = st.columns(3)
             nom, ape = c1.text_input("Nombre"), c2.text_input("Apellido")
             cod_e = c3.text_input("Código Empleado")
             mail, car = c1.text_input("Email"), c2.text_input("Cargo")
             esp = c3.text_input("Especialidad")
-            cl1 = c1.selectbox("Clasificación 1", ["Interno", "Externo"])
+            cl1 = c1.selectbox("Clasificación", ["Interno", "Externo"])
             dir_p = c2.text_input("Dirección")
             
             st.write("✒️ **Firma Maestra del Técnico**")
@@ -95,10 +94,10 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("personal")), use_container_width=True)
 
-    # --- 3. MAQUINARIA (RESTAURADO 12 CAMPOS) ---
+    # --- 3. MAQUINARIA (12 CAMPOS RESTAURADOS) ---
     elif menu == "⚙️ Maquinaria":
         st.header("Ficha Técnica de Equipos")
-        with st.form("f_maq_full"):
+        with st.form("f_maq"):
             c1, c2, c3 = st.columns(3)
             nm, cod, ubi = c1.text_input("Nombre Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
             ser, fab, mod = c1.text_input("Serial"), c2.text_input("Fabricante"), c3.text_input("Modelo")
@@ -117,7 +116,7 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 4. ÓRDENES (RESTAURADO 15 CAMPOS + FIRMA) ---
+    # --- 4. ÓRDENES (15 CAMPOS + FIRMA) ---
     elif menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de Órdenes")
         m_data, p_data = cargar("maquinas"), cargar("personal")
@@ -135,7 +134,7 @@ else:
                 paro, her, cos = c7.selectbox("Requiere Paro", ["No", "Sí"]), c8.text_input("Herramientas"), c9.number_input("Costo Estimado", 0.0)
                 ins = st.text_input("Insumos/Repuestos")
 
-                if st.form_submit_button("Lanzar"):
+                if st.form_submit_button("Lanzar Orden"):
                     supabase.table("ordenes").insert({
                         "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, "estado": "Proceso",
                         "tipo_tarea": tt, "frecuencia": fr, "duracion_estimada": dur, "requiere_paro": paro,
