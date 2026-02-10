@@ -58,7 +58,7 @@ else:
         df = pd.DataFrame(cargar("ordenes"))
         if not df.empty:
             c1, c2, c3 = st.columns(3)
-            c1.metric("Órdenes", len(df))
+            c1.metric("Órdenes Totales", len(df))
             if 'costo' in df.columns: c2.metric("Inversión Total", f"${df['costo'].sum():,.2f}")
             import plotly.express as px
             fig = px.pie(df, names='estado', hole=0.4, title="Estado Global")
@@ -79,7 +79,7 @@ else:
             clasificacion1 = c1.selectbox("Clasificación 1", ["Interno", "Externo"])
             direccion = c2.text_input("Dirección")
             
-            st.write("✒️ **Firma**")
+            st.write("✒️ **Firma Digital Maestra**")
             st_canvas(stroke_width=2, stroke_color="black", height=100, width=400, key="p_sign")
             
             if st.form_submit_button("Guardar"):
@@ -121,34 +121,69 @@ else:
         mlist = cargar("maquinas")
         if mlist: st.dataframe(pd.DataFrame(mlist).drop(columns=['id', 'creado_por'], errors='ignore'))
 
-    # --- 4. ÓRDENES (USA TUS 14 COLUMNAS EXACTAS) ---
+    # --- 4. ÓRDENES (REVISADO CON FIRMA DE JEFE) ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de OP")
+        
         with st.expander("➕ Lanzar Nueva OP"):
             m_opts = [f"{m['nombre_maquina']} ({m['codigo']})" for m in cargar("maquinas")]
             p_opts = [f"{p['nombre']} {p['apellido']}" for p in cargar("personal")]
             with st.form("f_op"):
-                descripcion = st.text_area("Descripción")
+                desc = st.text_area("Descripción")
                 c1, c2, c3 = st.columns(3)
-                id_maquina = c1.selectbox("Máquina", m_opts)
-                id_tecnico = c2.selectbox("Técnico", p_opts)
-                prioridad = c3.selectbox("Prioridad", ["ALTA", "MEDIA", "BAJA"])
+                maq = c1.selectbox("Máquina", m_opts)
+                tec = c2.selectbox("Técnico", p_opts)
+                prio = c3.selectbox("Prioridad", ["ALTA", "MEDIA", "BAJA"])
+                
                 c4, c5, c6 = st.columns(3)
-                tipo_tarea = c4.selectbox("Tipo", ["Correctiva", "Preventiva"])
-                frecuencia = c5.selectbox("Frecuencia", ["Semanal", "Mensual"])
-                duracion_estimada = c6.text_input("Duración", "1h")
+                tipo = c4.selectbox("Tipo", ["Correctiva", "Preventiva"])
+                frec = c5.selectbox("Frecuencia", ["Única", "Semanal", "Mensual"])
+                dur = c6.text_input("Duración", "1h")
+                
                 c7, c8, c9 = st.columns(3)
-                requiere_paro = c7.selectbox("Paro", ["No", "Sí"])
-                herramientas = c8.text_input("Herramientas")
-                costo = c9.number_input("Costo", 0.0)
-                insumos = st.text_input("Insumos")
+                paro = c7.selectbox("Paro", ["No", "Sí"])
+                herr = c8.text_input("Herramientas")
+                cost = c9.number_input("Costo", 0.0)
+                insu = st.text_input("Insumos")
                 
                 if st.form_submit_button("Lanzar"):
                     supabase.table("ordenes").insert({
-                        "descripcion": descripcion, "id_maquina": id_maquina, "id_tecnico": id_tecnico,
-                        "estado": "Proceso", "tipo_tarea": tipo_tarea, "frecuencia": frecuencia,
-                        "duracion_estimada": duracion_estimada, "requiere_paro": requiere_paro,
-                        "herramientas": herramientas, "prioridad": prioridad, "insumos": insumos,
-                        "costo": costo, "creado_por": st.session_state.user
-                    }).execute()
+                        "descripcion": desc, "id_maquina": maq, "id_tecnico": tec,
+                        "estado": "Proceso", "tipo_tarea": tipo, "frecuencia": frec,
+                        "duracion_estimada": dur, "requiere_paro": paro,
+                        "herramientas": herr, "prioridad": prio, "insumos": insu,
+                        "costo": cost, "creado_por": st.session_state.user
                     st.rerun()
+
+        st.divider()
+        df_o = pd.DataFrame(cargar("ordenes"))
+        if not df_o.empty:
+            pasos = {"Proceso": "Realizada", "Realizada": "Revisada", "Revisada": "Finalizada"}
+            for est in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
+                st.subheader(f"📍 {est}")
+                items = df_o[df_o['estado'] == est]
+                for _, row in items.iterrows():
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([3, 1, 1])
+                        c1.write(f"### {row['prioridad']} | {row['id_maquina']}")
+                        c1.write(f"**Tarea:** {row['descripcion']}")
+                        c1.caption(f"👤 Técnico: {row['id_tecnico']} | ⏱️ {row.get('duracion_estimada','-')} | 💰 ${row.get('costo',0)}")
+                        
+                        if est == "Revisada":
+                            st.write("✒️ **Firma de Aprobación del Jefe**")
+                            # Canvas de firma específico para esta orden
+                            st_canvas(stroke_width=2, stroke_color="black", background_color="#f0f0f0", height=80, width=250, key=f"f_{row['id']}")
+                            if c2.button("✅ Firmar y Finalizar", key=f"btn_f_{row['id']}"):
+                                supabase.table("ordenes").update({
+                                    "estado": "Finalizada", 
+                                    "firma_jefe": "APROBADO"
+                                }).eq("id", row['id']).execute()
+                                st.rerun()
+                        elif est in pasos:
+                            if c2.button(f"➡️ {pasos[est]}", key=f"av_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": pasos[est]}).eq("id", row['id']).execute()
+                                st.rerun()
+                        
+                        if c3.button("🗑️", key=f"del_{row['id']}"):
+                            supabase.table("ordenes").delete().eq("id", row['id']).execute()
+                            st.rerun()
