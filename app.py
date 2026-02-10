@@ -1,15 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
-from streamlit_drawable_canvas import st_canvas # Mantener diseño de firmas
-import urllib.parse
-
-# --- PROTECCIÓN PARA LOS GRÁFICOS (MANTENER DISEÑO) ---
-try:
-    import plotly.express as px
-    GRAFICOS_LISTOS = True
-except ImportError:
-    GRAFICOS_LISTOS = False
+from streamlit_drawable_canvas import st_canvas
 
 # --- CONEXIÓN ---
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
@@ -21,14 +13,14 @@ def cargar(tabla):
     try:
         res = supabase.table(tabla).select("*").eq("creado_por", st.session_state.user).execute()
         return res.data if res.data else []
-    except: return []
+    except Exception:
+        return []
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="CORMAIN CMMS PRO", layout="wide")
-
 if 'auth' not in st.session_state: st.session_state.auth = False
 
-# --- LOGIN (SIN CAMBIOS) ---
+# --- LOGIN ---
 if not st.session_state.auth:
     tab1, tab2 = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
     with tab1:
@@ -44,19 +36,17 @@ if not st.session_state.auth:
     with tab2:
         nu, np = st.text_input("Nuevo Email"), st.text_input("Nueva Clave", type="password")
         if st.button("Crear Cuenta"):
-            supabase.table("usuarios").insert({"email": nu, "password": np}).execute()
+            supabase.table("usuarios").insert({"email": nu, "password": np, "creado_por": nu}).execute()
             st.success("¡Cuenta creada!")
 
 else:
-    # --- MENÚ LATERAL (BOTONES LARGOS) ---
+    # --- MENÚ LATERAL ---
     st.sidebar.title(f"👤 {st.session_state.user}")
     if "menu" not in st.session_state: st.session_state.menu = "🏠 Inicio"
-
     if st.sidebar.button("🏠 Inicio", use_container_width=True): st.session_state.menu = "🏠 Inicio"
     if st.sidebar.button("👥 Personal", use_container_width=True): st.session_state.menu = "👥 Personal"
     if st.sidebar.button("⚙️ Maquinaria", use_container_width=True): st.session_state.menu = "⚙️ Maquinaria"
     if st.sidebar.button("📑 Órdenes de Trabajo", use_container_width=True): st.session_state.menu = "📑 Órdenes de Trabajo"
-    
     st.sidebar.divider()
     if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
         st.session_state.auth = False
@@ -65,104 +55,89 @@ else:
     # --- 1. INICIO (DASHBOARD) ---
     if st.session_state.menu == "🏠 Inicio":
         st.title("📊 Panel de Control")
-        o_data = cargar("ordenes")
-        df = pd.DataFrame(o_data)
+        df = pd.DataFrame(cargar("ordenes"))
         if not df.empty:
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("En Proceso", len(df[df['estado'] == 'Proceso']))
             c2.metric("Realizadas", len(df[df['estado'] == 'Realizada']))
-            c3.metric("Revisadas", len(df[df['estado'] == 'Revisada']))
-            c4.metric("Finalizadas", len(df[df['estado'] == 'Finalizada']))
+            c3.metric("Finalizadas", len(df[df['estado'] == 'Finalizada']))
             if 'costo' in df.columns:
-                st.metric("Inversión Total", f"${df['costo'].sum():,.2f}")
-            if GRAFICOS_LISTOS:
-                st.divider()
-                colg1, colg2 = st.columns(2)
-                fig1 = px.pie(df, names='estado', hole=0.4, title="Estado Global")
-                colg1.plotly_chart(fig1, use_container_width=True)
-                fig2 = px.pie(df, names='prioridad', title="Prioridad de Tareas")
-                colg2.plotly_chart(fig2, use_container_width=True)
-        else: st.info("No hay datos para mostrar.")
+                c4.metric("Inversión Total", f"${df['costo'].sum():,.2f}")
+            
+            import plotly.express as px
+            fig = px.pie(df, names='estado', hole=0.4, title="Distribución de Estados")
+            st.plotly_chart(fig, use_container_width=True)
+        else: st.info("Sin datos registrados.")
 
-    # --- 2. PERSONAL (RESPETANDO TUS COLUMNAS) ---
+    # --- 2. PERSONAL ---
     elif st.session_state.menu == "👥 Personal":
         st.header("Gestión de Personal")
-        with st.form("f_pers"):
+        with st.form("f_personal"):
             c1, c2, c3 = st.columns(3)
             nom, ape = c1.text_input("Nombres"), c2.text_input("Apellidos")
-            cod_e = c3.text_input("Código de Empleado")
-            mail, car = c1.text_input("Email Corporativo"), c2.text_input("Cargo")
-            direc = c3.text_input("Dirección")
+            cod_e = c3.text_input("Código Empleado")
+            mail, car = c1.text_input("Email"), c2.text_input("Cargo")
+            dire = c3.text_input("Dirección")
             cl1 = c1.selectbox("Clasificación 1", ["Interno", "Externo"])
-            cl2 = c2.selectbox("Clasificación 2", ["Mecánico", "Eléctrico", "Operador", "Instrumentista", "Civil"])
+            cl2 = c2.selectbox("Especialidad", ["Mecánico", "Eléctrico", "Operador"])
             
-            st.write("✒️ **Firma Digital Maestra**")
-            st_canvas(stroke_width=2, stroke_color="black", background_color="#ffffff", height=100, width=400, key="p_sign")
+            st.write("✒️ **Firma Digital**")
+            st_canvas(stroke_width=2, stroke_color="black", height=100, width=400, key="p_sign")
             
-            if st.form_submit_button("Guardar Personal"):
+            if st.form_submit_button("Guardar"):
                 supabase.table("personal").insert({
                     "nombre": f"{nom} {ape}", "apellido": ape, "codigo_empleado": cod_e,
-                    "email": mail, "cargo": car, "especialidad": cl2, 
-                    "clasificacion1": cl1, "direccion": direc, "firma_path": "REGISTRADA",
+                    "email": mail, "cargo": car, "especialidad": cl2, "clasificacion1": cl1,
+                    "direccion": dire, "firma_path": "REGISTRADA", "creado_por": st.session_state.user
+                }).execute()
+                st.rerun()
+        st.dataframe(pd.DataFrame(cargar("personal")), use_container_width=True)
+
+    # --- 3. MAQUINARIA ---
+    elif st.session_state.menu == "⚙️ Maquinaria":
+        st.header("Ficha Técnica de Equipos")
+        with st.form("f_maq"):
+            c1, c2, c3 = st.columns(3)
+            nm, cod, ubi = c1.text_input("Nombre Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
+            fab, mod, ser = c1.text_input("Fabricante"), c2.text_input("Modelo"), c3.text_input("Serial")
+            est = c1.selectbox("Estado", ["Operativa", "Falla", "Mantenimiento"])
+            hu = c2.number_input("Horas Uso", min_value=0)
+            fc = c3.date_input("Fecha Compra")
+            a1, a2 = st.text_area("Apartado 1"), st.text_area("Apartado 2")
+            if st.form_submit_button("Registrar"):
+                supabase.table("maquinas").insert({
+                    "nombre_maquina": nm, "codigo": cod, "ubicacion": ubi, "estado": est,
+                    "serial": ser, "fabricante": fab, "modelo": mod, "horas_uso": hu,
+                    "fecha_compra": str(fc), "apartado1": a1, "apartado2": a2,
                     "creado_por": st.session_state.user
                 }).execute()
                 st.rerun()
-        
-        plist = cargar("personal")
-        if plist: st.dataframe(pd.DataFrame(plist).drop(columns=['id', 'creado_por'], errors='ignore'), use_container_width=True)
+        st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 3. MAQUINARIA (FICHA TÉCNICA) ---
-    elif st.session_state.menu == "⚙️ Maquinaria":
-        st.header("Gestión de Activos (Ficha Técnica)")
-        with st.form("f_maq"):
-            c1, c2, c3 = st.columns(3)
-            n_m, cod_m, fab_m = c1.text_input("Máquina"), c2.text_input("Código"), c3.text_input("Fabricante")
-            mod_m, ser_m = c1.text_input("Modelo"), c2.text_input("Serial")
-            est_m = c3.selectbox("Estado", ["Operativa", "Falla", "Mantenimiento"])
-            f_compra, hrs_uso = c1.date_input("Fecha Compra"), c2.number_input("Horas Uso", min_value=0)
-            ap1, ap2 = st.text_area("Apartado 1"), st.text_area("Apartado 2")
-            if st.form_submit_button("Registrar Máquina"):
-                supabase.table("maquinas").insert({
-                    "nombre_maquina": n_m, "codigo": cod_m, "fabricante": fab_m, "modelo": mod_m,
-                    "serial": ser_m, "estado": est_m, "fecha_compra": str(f_compra), "horas_uso": hrs_uso,
-                    "apartado1": ap1, "apartado2": ap2, "creado_por": st.session_state.user
-                }).execute()
-                st.rerun()
-        mlist = cargar("maquinas")
-        if mlist: st.dataframe(pd.DataFrame(mlist).drop(columns=['id', 'creado_por'], errors='ignore'), use_container_width=True)
-
-    # --- 4. ÓRDENES (USANDO TUS 15 COLUMNAS EXACTAS) ---
+    # --- 4. ÓRDENES (REVISADO CON TUS 15 COLUMNAS) ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
-        st.header("Gestión de Mantenimiento")
-        
-        with st.expander("➕ Crear Nueva Orden"):
-            maqs = [f"{m['nombre_maquina']} ({m['codigo']})" for m in cargar("maquinas")]
-            pers = [p['nombre'] for p in cargar("personal")]
-            
-            with st.form("f_orden_completa"):
-                desc = st.text_area("Descripción de la Falla/Tarea")
+        st.header("Gestión de OP")
+        m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in cargar("maquinas")]
+        p_list = [p['nombre'] for p in cargar("personal")]
+
+        with st.expander("➕ Lanzar Nueva OP"):
+            with st.form("f_op"):
+                desc = st.text_area("Descripción")
                 c1, c2, c3 = st.columns(3)
-                maq, tec, prio = c1.selectbox("Máquina", maqs), c2.selectbox("Técnico", pers), c3.selectbox("Prioridad", ["🔴 ALTA", "🟡 MEDIA", "🟢 BAJA"])
+                mq, tc, pr = c1.selectbox("Máquina", maqs if 'maqs' in locals() else m_list), c2.selectbox("Técnico", p_list), c3.selectbox("Prioridad", ["🔴 ALTA", "🟡 MEDIA", "🟢 BAJA"])
                 
                 c4, c5, c6 = st.columns(3)
-                tipo_t = c4.selectbox("Tipo de Tarea", ["Lubricación", "Ajuste", "Inspección", "Reparación"])
-                duracion = c5.text_input("Duración Estimada", value="1h")
-                paro = c6.selectbox("¿Requiere Paro?", ["No", "Sí"])
+                tt, fr, dur = c4.selectbox("Tipo", ["Correctiva", "Preventiva"]), c5.selectbox("Frecuencia", ["Mensual", "Semanal"]), c6.text_input("Duración", "1h")
                 
                 c7, c8, c9 = st.columns(3)
-                frec = c7.selectbox("Frecuencia", ["Única", "Diaria", "Semanal", "Mensual"])
-                costo = c8.number_input("Costo Estimado ($)", min_value=0.0)
-                herr = c9.text_input("Herramientas")
-                
-                insu = st.text_input("Insumos/Repuestos")
-                
-                if st.form_submit_button("Lanzar Orden"):
-                    # EMPALME DE TERMINALES HACIA TUS 15 COLUMNAS
+                paro, her, cos = c7.selectbox("Paro", ["No", "Sí"]), c8.text_input("Herramientas"), c9.number_input("Costo", 0.0)
+                ins = st.text_input("Insumos")
+
+                if st.form_submit_button("Lanzar"):
                     supabase.table("ordenes").insert({
-                        "descripcion": desc, "id_maquina": maq, "id_tecnico": tec,
-                        "tipo_tarea": tipo_t, "frecuencia": frec, "duracion_estimada": duracion,
-                        "requiere_paro": paro, "herramientas": herr, "prioridad": prio,
-                        "insumos": insu, "costo": costo, "estado": "Proceso",
+                        "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, "estado": "Proceso",
+                        "tipo_tarea": tt, "frecuencia": fr, "duracion_estimada": dur, "requiere_paro": paro,
+                        "herramientas": her, "prioridad": pr, "insumos": ins, "costo": cos,
                         "creado_por": st.session_state.user
                     }).execute()
                     st.rerun()
@@ -173,25 +148,10 @@ else:
             pasos = {"Proceso": "Realizada", "Realizada": "Revisada", "Revisada": "Finalizada"}
             for est in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
                 st.subheader(f"📍 {est}")
-                items = df_o[df_o['estado'] == est]
-                for _, row in items.iterrows():
+                filas = df_o[df_o['estado'] == est]
+                for _, row in filas.iterrows():
                     with st.container(border=True):
-                        col_a, col_b, col_c = st.columns([3, 1, 1])
-                        col_a.write(f"### {row['prioridad']} | {row['id_maquina']}")
-                        col_a.write(f"**Tarea:** {row['descripcion']}")
-                        col_a.caption(f"🛠️ {row.get('tipo_tarea','-')} | ⏱️ {row.get('duracion_estimada','-')} | 💰 ${row.get('costo',0)}")
-                        
-                        if est == "Revisada":
-                            st.write("✒️ **Firma de Aprobación del Jefe**")
-                            st_canvas(stroke_width=2, stroke_color="black", background_color="#eee", height=80, width=250, key=f"f_{row['id']}")
-                            if col_b.button("✅ Firmar y Cerrar", key=f"btn_f_{row['id']}"):
-                                supabase.table("ordenes").update({"estado": "Finalizada", "firma_jefe": "APROBADO"}).eq("id", row['id']).execute()
-                                st.rerun()
-                        elif est in pasos:
-                            if col_b.button(f"➡️ {pasos[est]}", key=f"av_{row['id']}"):
-                                supabase.table("ordenes").update({"estado": pasos[est]}).eq("id", row['id']).execute()
-                                st.rerun()
-                        
-                        if col_c.button("🗑️ Eliminar", key=f"del_{row['id']}"):
-                            supabase.table("ordenes").delete().eq("id", row['id']).execute()
-                            st.rerun()
+                        c1, c2, c3 = st.columns([3, 1, 1])
+                        c1.write(f"**{row['id_maquina']}** | {row['prioridad']}")
+                        c1.caption(f"🔧 {row['descripcion']}")
+                        if est == "
