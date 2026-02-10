@@ -116,39 +116,53 @@ elif menu == "⚙️ Maquinaria":
             except Exception as e: st.error(f"Error: {e}")
     st.dataframe(pd.DataFrame(cargar_datos("maquinas")), use_container_width=True)
 
-# --- 8. ÓRDENES DE PRODUCCIÓN (FLUJO DE 4 ETAPAS) ---
-elif menu == "📑 Órdenes de Producción":
-    st.header("📑 Gestión Integral de Órdenes")
+# --- 8. ÓRDENES DE PRODUCCIÓN (CORREGIDO: CAMPO DE HORA ÚNICO) ---
+elif menu == "📑 Órdenes de Trabajo (OP)":
+    st.header("📑 Sistema de Gestión de Órdenes de Producción")
     
-    with st.expander("🚀 Lanzar Nueva Orden de Trabajo (OP)"):
-        with st.form("f_op"):
-            desc = st.text_area("Descripción")
+    # DATOS PARA SELECTORES
+    mq_list = [m['nombre_maquina'] for m in cargar_datos("maquinas")]
+    tc_list = [f"{p['nombre']} {p['apellido']}" for p in cargar_datos("personal")]
+
+    with st.expander("🚀 Lanzar Nueva Orden de Trabajo (OP)", expanded=False):
+        with st.form("form_op_maestro"):
+            desc = st.text_area("Descripción de la Tarea")
             c1, c2, c3 = st.columns(3)
-            mq = c1.selectbox("Máquina", [m['nombre_maquina'] for m in cargar_datos("maquinas")])
-            tc = c2.selectbox("Técnico", [f"{p['nombre']} {p['apellido']}" for p in cargar_datos("personal")])
+            mq = c1.selectbox("Seleccionar Máquina", mq_list)
+            tc = c2.selectbox("Asignar Técnico", tc_list)
             prio = c3.selectbox("Prioridad", ["ALTA", "NORMAL", "BAJA"])
-            tipo = c1.selectbox("Tipo de Tarea", ["Correctiva", "Preventiva"])
-            freq = c2.selectbox("Frecuencia", ["Única", "Semanal", "Mensual", "Anual"])
             
-            st.write("⏱️ Duración Estimada")
-            h, m = st.columns(2)
-            hrs, mins = h.number_input("Horas", 0), m.number_input("Minutos", 0)
+            tipo = c1.selectbox("Tipo de Tarea", ["Correctiva", "Preventiva", "Predictiva"])
+            freq = c2.selectbox("Frecuencia", ["Única", "Diaria", "Semanal", "Mensual", "Semestral", "Anual"])
+            
+            # CAMPO ÚNICO PARA DURACIÓN (SOLUCIÓN AL ERROR)
+            dur_total = c3.text_input("Duración Estimada (ej: 2h 30min)")
             
             paro = c1.selectbox("¿Requiere Paro?", ["Sí", "No"])
-            herr, insu = c2.text_input("Herramientas"), c3.text_input("Insumos")
-            costo = st.number_input("Costo Estimado ($)", 0.0) # Campo float8
+            herr = c2.text_input("Herramientas Necesarias")
+            insu = c3.text_input("Insumos / Repuestos")
+            costo = st.number_input("Costo Estimado ($)", 0.0)
             
-            if st.form_submit_button("Lanzar"):
+            if st.form_submit_button("📡 Lanzar Orden a Recepción"):
                 try:
                     supabase.table("ordenes").insert({
-                        "descripcion": desc, "id_maquina": mq, "id_tecnico": tc, "estado": "Recepción",
-                        "tipo_tarea": tipo, "frecuencia": freq, "duracion_estimada": f"{hrs}h {mins}m",
-                        "requiere_paro": paro, "herramientas": herr, "prioridad": prio,
-                        "insumos": insu, "costo": float(costo), "creado_por": st.session_state.user
+                        "descripcion": desc, 
+                        "id_maquina": mq, 
+                        "id_tecnico": tc, 
+                        "estado": "Recepción",
+                        "tipo_tarea": tipo, 
+                        "frecuencia": freq, 
+                        "duracion_estimada": dur_total, # Se envía como texto directo
+                        "requiere_paro": paro, 
+                        "herramientas": herr, 
+                        "prioridad": prio,
+                        "insumos": insu, 
+                        "costo": float(costo), 
+                        "creado_por": st.session_state.user
                     }).execute()
-                    st.success("Orden en Recepción")
-                    st.rerun()
-                except Exception as e: st.error(f"Error al guardar: {e}")
+                    st.success("Orden en etapa de Recepción"); st.rerun()
+                except Exception as e:
+                    st.error(f"Error al guardar: {e}")
 
     # EL TABLERO DINÁMICO
     st.divider()
@@ -177,3 +191,4 @@ elif menu == "📑 Órdenes de Producción":
         with t4: # REVISADAS
             st.dataframe(df_op[df_op['estado'] == "Revisada por Jefe"], use_container_width=True)
     else: st.info("No hay órdenes activas.")
+
