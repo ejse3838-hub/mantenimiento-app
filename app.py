@@ -52,36 +52,33 @@ else:
         st.session_state.auth = False
         st.rerun()
 
-    # --- 1. INICIO (DASHBOARD) ---
+    # --- 1. DASHBOARD ---
     if st.session_state.menu == "🏠 Inicio":
         st.title("📊 Panel de Control")
         df = pd.DataFrame(cargar("ordenes"))
         if not df.empty:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("En Proceso", len(df[df['estado'] == 'Proceso']))
-            c2.metric("Realizadas", len(df[df['estado'] == 'Realizada']))
-            c3.metric("Finalizadas", len(df[df['estado'] == 'Finalizada']))
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Órdenes", len(df))
             if 'costo' in df.columns:
-                c4.metric("Inversión Total", f"${df['costo'].sum():,.2f}")
-            
+                c2.metric("Inversión", f"${df['costo'].sum():,.2f}")
             import plotly.express as px
-            fig = px.pie(df, names='estado', hole=0.4, title="Distribución de Estados")
+            fig = px.pie(df, names='estado', hole=0.4, title="Resumen Operativo")
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("Sin datos registrados.")
+        else: st.info("Sin datos registrados")
 
     # --- 2. PERSONAL ---
     elif st.session_state.menu == "👥 Personal":
-        st.header("Gestión de Personal")
+        st.header("Registro de Personal")
         with st.form("f_personal"):
             c1, c2, c3 = st.columns(3)
             nom, ape = c1.text_input("Nombres"), c2.text_input("Apellidos")
-            cod_e = c3.text_input("Código Empleado")
+            cod_e = c3.text_input("Código")
             mail, car = c1.text_input("Email"), c2.text_input("Cargo")
             dire = c3.text_input("Dirección")
-            cl1 = c1.selectbox("Clasificación 1", ["Interno", "Externo"])
-            cl2 = c2.selectbox("Especialidad", ["Mecánico", "Eléctrico", "Operador"])
+            cl1 = c1.selectbox("Clasificación 1", ["Interno", "Contratista"])
+            cl2 = c2.selectbox("Especialidad", ["Mecánico", "Eléctrico", "Instrumentista"])
             
-            st.write("✒️ **Firma Digital**")
+            st.write("🖋️ Firma Maestra")
             st_canvas(stroke_width=2, stroke_color="black", height=100, width=400, key="p_sign")
             
             if st.form_submit_button("Guardar"):
@@ -95,10 +92,10 @@ else:
 
     # --- 3. MAQUINARIA ---
     elif st.session_state.menu == "⚙️ Maquinaria":
-        st.header("Ficha Técnica de Equipos")
+        st.header("Ficha Técnica")
         with st.form("f_maq"):
             c1, c2, c3 = st.columns(3)
-            nm, cod, ubi = c1.text_input("Nombre Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
+            nm, cod, ubi = c1.text_input("Máquina"), c2.text_input("Código"), c3.text_input("Ubicación")
             fab, mod, ser = c1.text_input("Fabricante"), c2.text_input("Modelo"), c3.text_input("Serial")
             est = c1.selectbox("Estado", ["Operativa", "Falla", "Mantenimiento"])
             hu = c2.number_input("Horas Uso", min_value=0)
@@ -114,21 +111,21 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 4. ÓRDENES (REVISADO CON TUS 15 COLUMNAS) ---
+    # --- 4. ÓRDENES (REVISADO LÍNEA POR LÍNEA) ---
     elif st.session_state.menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de OP")
-        m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in cargar("maquinas")]
-        p_list = [p['nombre'] for p in cargar("personal")]
+        m_data = cargar("maquinas")
+        p_data = cargar("personal")
+        m_list = [f"{m['nombre_maquina']} ({m['codigo']})" for m in m_data] if m_data else ["Registrar máquinas"]
+        p_list = [p['nombre'] for p in p_data] if p_data else ["Registrar personal"]
 
         with st.expander("➕ Lanzar Nueva OP"):
             with st.form("f_op"):
                 desc = st.text_area("Descripción")
                 c1, c2, c3 = st.columns(3)
-                mq, tc, pr = c1.selectbox("Máquina", maqs if 'maqs' in locals() else m_list), c2.selectbox("Técnico", p_list), c3.selectbox("Prioridad", ["🔴 ALTA", "🟡 MEDIA", "🟢 BAJA"])
-                
+                mq, tc, pr = c1.selectbox("Máquina", m_list), c2.selectbox("Técnico", p_list), c3.selectbox("Prioridad", ["🔴 ALTA", "🟡 MEDIA", "🟢 BAJA"])
                 c4, c5, c6 = st.columns(3)
                 tt, fr, dur = c4.selectbox("Tipo", ["Correctiva", "Preventiva"]), c5.selectbox("Frecuencia", ["Mensual", "Semanal"]), c6.text_input("Duración", "1h")
-                
                 c7, c8, c9 = st.columns(3)
                 paro, her, cos = c7.selectbox("Paro", ["No", "Sí"]), c8.text_input("Herramientas"), c9.number_input("Costo", 0.0)
                 ins = st.text_input("Insumos")
@@ -146,23 +143,23 @@ else:
         df_o = pd.DataFrame(cargar("ordenes"))
         if not df_o.empty:
             pasos = {"Proceso": "Realizada", "Realizada": "Revisada", "Revisada": "Finalizada"}
-            for est in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
-                st.subheader(f"📍 {est}")
-                filas = df_o[df_o['estado'] == est]
+            for est_actual in ["Proceso", "Realizada", "Revisada", "Finalizada"]:
+                st.subheader(f"📍 {est_actual}")
+                filas = df_o[df_o['estado'] == est_actual]
                 for _, row in filas.iterrows():
                     with st.container(border=True):
                         c1, c2, c3 = st.columns([3, 1, 1])
                         c1.write(f"**{row['id_maquina']}** | {row['prioridad']}")
                         c1.caption(f"🔧 {row['descripcion']}")
-                        if est == "Revisada":
+                        if est_actual == "Revisada":
                             st.write("✒️ Firma Jefe")
                             st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
                             if c2.button("Finalizar", key=f"fbtn_{row['id']}"):
                                 supabase.table("ordenes").update({"estado": "Finalizada", "firma_jefe": "OK"}).eq("id", row['id']).execute()
                                 st.rerun()
-                        elif est in pasos:
-                            if c2.button(f"➡️", key=f"av_{row['id']}"):
-                                supabase.table("ordenes").update({"estado": pasos[est]}).eq("id", row['id']).execute()
+                        elif est_actual in pasos:
+                            if c2.button("➡️", key=f"av_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": pasos[est_actual]}).eq("id", row['id']).execute()
                                 st.rerun()
                         if c3.button("🗑️", key=f"del_{row['id']}"):
                             supabase.table("ordenes").delete().eq("id", row['id']).execute()
