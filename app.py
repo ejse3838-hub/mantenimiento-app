@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
-import plotly.express as px  # Librería para los gráficos de pastel
+import plotly.express as px  # Para los gráficos de pastel
 
 # --- CONEXIÓN ---
 url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
@@ -47,7 +47,7 @@ else:
     # --- MENÚ LATERAL ---
     menu = st.sidebar.selectbox("Navegación", ["🏠 Inicio", "👥 Personal", "⚙️ Maquinaria", "📑 Órdenes de Trabajo"])
 
-    # --- 1. INICIO (DASHBOARD + KPI'S AUMENTADOS) ---
+    # --- 1. INICIO (DASHBOARD + KPI'S) ---
     if menu == "🏠 Inicio":
         st.title("📊 Panel de Control CORMAIN")
         o_data = cargar("ordenes")
@@ -57,7 +57,7 @@ else:
         col3.metric("Revisadas", len([o for o in o_data if o['estado'] == 'Revisada']))
         col4.metric("Finalizadas", len([o for o in o_data if o['estado'] == 'Finalizada']))
 
-        # SECCIÓN DE GRÁFICOS (AUMENTO)
+        # SECCIÓN DE GRÁFICOS (AUMENTO ESTILO FRACTAL)
         st.divider()
         if o_data:
             df = pd.DataFrame(o_data)
@@ -96,22 +96,22 @@ else:
                 st.rerun()
         st.dataframe(pd.DataFrame(cargar("maquinas")), use_container_width=True)
 
-    # --- 4. ÓRDENES DE TRABAJO (FLUJO DINÁMICO + CAMPOS FRACTAL) ---
+    # --- 4. ÓRDENES DE TRABAJO (FLUJO DINÁMICO + CAMPOS TÉCNICOS) ---
     elif menu == "📑 Órdenes de Trabajo":
         st.header("Gestión de Órdenes de Producción")
         
-        # Formulario de creación (CON LOS NUEVOS CAMPOS)
+        # Formulario de creación (CON TODOS LOS CAMPOS TÉCNICOS)
         with st.expander("➕ Crear Nueva Orden"):
             maqs = [m['nombre_maquina'] for m in cargar("maquinas")]
             pers = [p['nombre'] for p in cargar("personal")]
             
-            with st.form("f_crear_ot_pro"):
+            with st.form("f_crear_ot_final"):
                 col_a, col_b = st.columns(2)
                 desc = col_a.text_area("Descripción de la Tarea")
                 m_s = col_a.selectbox("Seleccionar Máquina", maqs)
                 t_s = col_b.selectbox("Asignar Técnico", pers)
                 
-                # Campos nuevos basados en tu tabla de Supabase
+                # Campos nuevos aumentados
                 tipo_t = col_b.selectbox("Tipo de Tarea", ["Mecánica", "Eléctrica", "Lubricación", "Inspección"])
                 dur = col_a.number_input("Duración Estimada (min)", value=30)
                 frec = col_b.selectbox("Frecuencia", ["Correctiva", "Semanal", "Mensual"])
@@ -134,7 +134,7 @@ else:
 
         st.divider()
         
-        # Tablero de Control de Estados (REVERSIBLE)
+        # Tablero de Control de Estados (FLUJO DINÁMICO REVERSIBLE)
         o_data = cargar("ordenes")
         if o_data:
             df = pd.DataFrame(o_data)
@@ -151,16 +151,16 @@ else:
                         with st.container(border=True):
                             col_t, col_b = st.columns([4, 1])
                             
-                            # Mostrar info técnica en la tarjeta
-                            duracion_txt = f" | ⏱️ {row.get('duracion_estimada', 0)} min"
-                            col_t.write(f"**ID {row['id']}**: {row['descripcion']} | 🏗️ {row['id_maquina']} | 👤 {row['id_tecnico']} {duracion_txt}")
+                            # Mostrar info técnica en la tarjeta (Aumento)
+                            dur_val = row.get('duracion_estimada', 0)
+                            col_t.write(f"**ID {row['id']}**: {row['descripcion']} | 🏗️ {row['id_maquina']} | 👤 {row['id_tecnico']} | ⏱️ {dur_val} min")
                             
                             if estado_actual in pasos:
                                 if col_b.button(f"➡️ {pasos[estado_actual]}", key=f"next_{row['id']}"):
                                     supabase.table("ordenes").update({"estado": pasos[estado_actual]}).eq("id", row['id']).execute()
                                     st.rerun()
                                 
-                                # BOTÓN DE RECHAZO (Solo en Revisada para volver a Proceso)
+                                # BOTÓN DE RECHAZO (Aumento: Solo en Revisada para volver a Proceso)
                                 if estado_actual == "Revisada":
                                     if col_b.button(f"❌ Rechazar", key=f"rech_{row['id']}"):
                                         supabase.table("ordenes").update({"estado": "Proceso"}).eq("id", row['id']).execute()
@@ -171,4 +171,3 @@ else:
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.auth = False
         st.rerun()
-
