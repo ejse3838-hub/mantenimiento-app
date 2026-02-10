@@ -154,4 +154,16 @@ else:
                         c1, c2, c3 = st.columns([3, 1, 1])
                         c1.write(f"**{row['id_maquina']}** | {row['prioridad']}")
                         c1.caption(f"🔧 {row['descripcion']}")
-                        if est == "
+                        if est == "Revisada":
+                            st.write("✒️ Firma Jefe")
+                            st_canvas(stroke_width=2, stroke_color="black", height=80, width=250, key=f"f_{row['id']}")
+                            if c2.button("Finalizar", key=f"fbtn_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": "Finalizada", "firma_jefe": "OK"}).eq("id", row['id']).execute()
+                                st.rerun()
+                        elif est in pasos:
+                            if c2.button(f"➡️", key=f"av_{row['id']}"):
+                                supabase.table("ordenes").update({"estado": pasos[est]}).eq("id", row['id']).execute()
+                                st.rerun()
+                        if c3.button("🗑️", key=f"del_{row['id']}"):
+                            supabase.table("ordenes").delete().eq("id", row['id']).execute()
+                            st.rerun()
