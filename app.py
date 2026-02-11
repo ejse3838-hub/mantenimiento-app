@@ -25,7 +25,6 @@ def cargar_datos(tabla):
 
 def mover_estado(id_op, nuevo_estado):
     try:
-        # Usamos 'id' en minúsculas como confirmaste
         supabase.table("ordenes").update({"estado": nuevo_estado}).eq("id", id_op).execute()
         st.success(f"Orden #{id_op} movida a {nuevo_estado}")
         st.rerun()
@@ -36,16 +35,45 @@ def mover_estado(id_op, nuevo_estado):
 if 'auth' not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🛠️ COMAIN - Gestión de Mantenimiento")
-    u = st.text_input("Usuario")
-    p = st.text_input("Clave", type="password")
-    if st.button("Entrar", use_container_width=True):
-        res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
-        if res.data:
-            st.session_state.auth = True
-            st.session_state.user = res.data[0]['email']
-            st.rerun()
-        else: st.error("Acceso incorrecto")
+    st.title("🛠️ CORMAIN - Gestión de Mantenimiento")
+    
+    # Pestañas para Login y Registro
+    tab_login, tab_registro = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
+    
+    with tab_login:
+        u = st.text_input("Usuario", key="login_user")
+        p = st.text_input("Clave", type="password", key="login_pass")
+        if st.button("Entrar", use_container_width=True):
+            res = supabase.table("usuarios").select("*").eq("email", u).eq("password", p).execute()
+            if res.data:
+                st.session_state.auth = True
+                st.session_state.user = res.data[0]['email']
+                st.rerun()
+            else: st.error("Acceso incorrecto")
+            
+    with tab_registro:
+        st.subheader("Crear nueva cuenta")
+        new_u = st.text_input("Nuevo Usuario (Email)", key="reg_user")
+        new_p = st.text_input("Nueva Clave", type="password", key="reg_pass")
+        confirm_p = st.text_input("Confirmar Clave", type="password", key="reg_pass_conf")
+        
+        if st.button("Registrar Cuenta", use_container_width=True):
+            if new_u and new_p:
+                if new_p == confirm_p:
+                    try:
+                        # Insertamos el nuevo usuario con 'creado_por' igual a su propio email
+                        supabase.table("usuarios").insert({
+                            "email": new_u, 
+                            "password": new_p, 
+                            "creado_por": new_u
+                        }).execute()
+                        st.success("✅ ¡Cuenta creada con éxito! Ya puedes iniciar sesión.")
+                    except Exception as e:
+                        st.error(f"Error al registrar: {e}")
+                else:
+                    st.warning("Las contraseñas no coinciden.")
+            else:
+                st.warning("Por favor completa todos los campos.")
     st.stop()
 
 # --- 4. MENÚ ---
@@ -102,7 +130,7 @@ elif menu == "⚙️ Maquinaria":
         nm, cod, ser = c1.text_input("Máquina"), c2.text_input("Código"), c3.text_input("Serial")
         fab, mod, ubi = c1.text_input("Fabricante"), c2.text_input("Modelo"), c3.text_input("Ubicación")
         est = c1.selectbox("Estado", ["Operativa", "Mantenimiento", "Falla"])
-        hrs = c2.number_input("Horas de uso", 0) # Campo int8
+        hrs = c2.number_input("Horas de uso", 0) 
         fc = c3.date_input("Fecha Compra")
         apa1, apa2 = c1.text_input("Apartado 1"), c2.text_input("Apartado 2")
         if st.form_submit_button("🛠️ Registrar"):
@@ -116,11 +144,9 @@ elif menu == "⚙️ Maquinaria":
             except Exception as e: st.error(f"Error: {e}")
     st.dataframe(pd.DataFrame(cargar_datos("maquinas")), use_container_width=True)
 
-# --- 8. MÓDULO: ÓRDENES (VERSIÓN LIMPIA Y SIN ERRORES DE HORA) ---
+# --- 8. MÓDULO: ÓRDENES ---
 elif menu == "📑 Órdenes de Producción":
     st.header("📑 Gestión de Órdenes")
-    
-    # DATOS PARA SELECTORES
     mq_list = [m['nombre_maquina'] for m in cargar_datos("maquinas")]
     tc_list = [f"{p['nombre']} {p['apellido']}" for p in cargar_datos("personal")]
 
@@ -128,24 +154,18 @@ elif menu == "📑 Órdenes de Producción":
         with st.form("f_op_final"):
             desc = st.text_area("Descripción de la Tarea")
             c1, c2, c3 = st.columns(3)
-            
-            # Selectores básicos
             mq = c1.selectbox("Máquina", mq_list if mq_list else [""])
             tc = c2.selectbox("Técnico", tc_list if tc_list else [""])
             prio = c3.selectbox("Prioridad", ["ALTA", "NORMAL", "BAJA"])
-            
-            # Campos de texto simple para evitar errores de formato
             tipo = c1.text_input("Tipo (ej: Correctiva)")
             freq = c2.text_input("Frecuencia (ej: Semanal)")
-            dur = c3.text_input("Duración Estimada (ej: 2 horas)") # AQUÍ PONES LA HORA TÚ MISMO
-            
+            dur = c3.text_input("Duración Estimada (ej: 2 horas)")
             paro = c1.selectbox("¿Requiere Paro?", ["Sí", "No"])
             herr = c2.text_input("Herramientas")
             insu = c3.text_input("Insumos")
             costo = st.number_input("Costo ($)", value=0.0, step=0.1)
             
             if st.form_submit_button("📡 Lanzar Orden"):
-                # Diccionario de datos con nombres EXACTOS de tu Supabase
                 datos_para_enviar = {
                     "descripcion": str(desc),
                     "id_maquina": str(mq),
@@ -161,32 +181,29 @@ elif menu == "📑 Órdenes de Producción":
                     "costo": float(costo),
                     "creado_por": str(st.session_state.user)
                 }
-                
                 try:
-                    # Intento de inserción directa
                     supabase.table("ordenes").insert(datos_para_enviar).execute()
                     st.success("✅ Orden creada con éxito")
                     st.rerun()
                 except Exception as error:
                     st.error(f"Error detectado: {error}")
                     
-    # EL TABLERO DINÁMICO
     st.divider()
     df_op = pd.DataFrame(cargar_datos("ordenes"))
     if not df_op.empty:
         t1, t2, t3, t4 = st.tabs(["📥 Recepción", "⚙️ En Proceso", "✅ Finalizada", "👨‍🏫 Revisada"])
         
-        with t1: # RECEPCIÓN
+        with t1: 
             for _, r in df_op[df_op['estado'] == "Recepción"].iterrows():
                 with st.expander(f"OT #{r['id']} - {r['id_maquina']}"):
                     if st.button(f"Iniciar Orden #{r['id']}"): mover_estado(r['id'], "En Proceso")
         
-        with t2: # EN PROCESO
+        with t2: 
             for _, r in df_op[df_op['estado'] == "En Proceso"].iterrows():
                 with st.expander(f"OT #{r['id']} en ejecución"):
                     if st.button(f"Finalizar Trabajo #{r['id']}"): mover_estado(r['id'], "Finalizada")
 
-        with t3: # FINALIZADAS
+        with t3: 
             for _, r in df_op[df_op['estado'] == "Finalizada"].iterrows():
                 with st.container(border=True):
                     st.write(f"OT #{r['id']} - Máquina: {r['id_maquina']}")
@@ -194,8 +211,7 @@ elif menu == "📑 Órdenes de Producción":
                     st_canvas(stroke_width=2, stroke_color="#000", background_color="#fff", height=80, key=f"fj_{r['id']}")
                     if st.button(f"Aprobar y Archivar #{r['id']}"): mover_estado(r['id'], "Revisada por Jefe")
 
-        with t4: # REVISADAS
+        with t4: 
             st.dataframe(df_op[df_op['estado'] == "Revisada por Jefe"], use_container_width=True)
     else: st.info("No hay órdenes activas.")
-
 
